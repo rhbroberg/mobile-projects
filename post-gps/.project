@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>post-gps</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+	</buildSpec>
+	<natures>
+	</natures>
+	<linkedResources>
+		<link>
+			<name>cores</name>
+			<type>2</type>
+			<location>C:/Users/rhb/eclipse/LINKIT_ASSIST_SDK/custom/arduino/cores/arduino</location>
+		</link>
+		<link>
+			<name>variant</name>
+			<type>2</type>
+			<location>C:/Users/rhb/eclipse/LINKIT_ASSIST_SDK/custom/arduino/variants/linkit_one</location>
+		</link>
+		<link>
+			<name>wirelib</name>
+			<type>2</type>
+			<location>C:/Users/rhb/eclipse/LINKIT_ASSIST_SDK/custom/arduino/Wire</location>
+		</link>
+	</linkedResources>
+</projectDescription>
