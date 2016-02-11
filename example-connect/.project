@@ -3,6 +3,7 @@
 	<name>example-connect</name>
 	<comment></comment>
 	<projects>
+		<project>Sketch_App</project>
 	</projects>
 	<buildSpec>
 	</buildSpec>

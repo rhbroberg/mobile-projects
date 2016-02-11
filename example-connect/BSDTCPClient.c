@@ -30,11 +30,20 @@ You can change the connect address by modify MACRO CONNECT_ADDRESS, change the A
 #include "vmtimer.h"
 #include "vmgsm_gprs.h"
 
-#define CONNECT_ADDRESS "180.76.3.151"
-#define CONNECT_PORT 80
+//#define DIST_APN
+#ifdef DIST_APN
 #define APN "cmwap"
-#define USING_PROXY VM_TRUE
 #define PROXY_IP    "10.0.0.172"
+#else
+#define APN "T-MOBILE"
+#define PROXY_IP	"92.242.140.21"
+
+#endif
+
+#define CONNECT_ADDRESS "103.235.46.39"
+#define CONNECT_PORT 80
+#define USING_PROXY VM_TRUE
+//#define USING_PROXY VM_FALSE
 #define PROXY_PORT  80
 #define REQUEST "GET http://www.baidu.com/ HTTP/1.1\r\nHOST:www.baidu.com\r\n\r\n"
 #define START_TIMER 60000
@@ -77,9 +86,17 @@ static VMINT32 soc_sub_thread(VM_THREAD_HANDLE thread_handle, void* user_data)
     closesocket(g_soc_client);
     return 0;
 }
+
 static void bearer_callback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id, void *user_data)
 {
     vm_log_debug("in bearer callback");
+    VMCHAR msg[1024];
+    sprintf(msg, "parms are %d and %d", VM_BEARER_WOULDBLOCK, g_bearer_hdl);
+    // this would get the bearer info, like ip address
+    //VM_E_SOC_SUCCESS :               Get IP address successfully, result is filled.
+    //ret = vm_bearer_get_data_account_id(apn, &dtacct_id);
+
+    vm_log_debug((const char *)msg);
 
 	if (VM_BEARER_WOULDBLOCK == g_bearer_hdl)
     {
@@ -90,17 +107,21 @@ static void bearer_callback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUI
         switch (event)
         {
             case VM_BEARER_DEACTIVATED:
+                vm_log_debug("deactivated");
                 break;
             case VM_BEARER_ACTIVATING:
+                vm_log_debug("activating");
                 break;
             case VM_BEARER_ACTIVATED:
                 vm_log_debug("starting thread");
                 g_thread_handle = vm_thread_create(soc_sub_thread, NULL, 0);
                 break;
             case VM_BEARER_DEACTIVATING:
+                vm_log_debug("deactivating");
                 break;
             default:
-                break;
+                vm_log_debug("default");
+            	break;
         }
     }
 }
@@ -120,9 +141,20 @@ void set_custom_apn(void)
 
 void start_doing(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
 {
-    vm_timer_delete_non_precise(tid);
-    //set_custom_apn();
+	VMBOOL smsReady = vm_gsm_sms_is_sms_ready();
+	vm_log_info("gsm is ready %d\n", smsReady);
+
+//	vm_timer_delete_non_precise(tid);
+#define USE_DA_PROXY
+#ifdef USE_DA_PROXY
+    set_custom_apn();
+    g_bearer_hdl = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, NULL, bearer_callback, VM_BEARER_IPV4);
+    #else
     g_bearer_hdl = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_NONE_PROXY_APN, NULL, bearer_callback, VM_BEARER_IPV4);
+
+#endif
+
+    vm_log_debug("vm_bearer_open returns %d\n", g_bearer_hdl);
 }
 
 void handle_sysevt(VMINT message, VMINT param) 
@@ -140,8 +172,43 @@ void handle_sysevt(VMINT message, VMINT param)
     }
 }
 
+#include "vmgsm_sim.h"
+
 void vm_main(void) 
 {
-    vm_pmng_register_system_event_callback(handle_sysevt);
+	VM_GSM_SIM_STATUS status;
+	VMSTR imsi=NULL;
+	VMSTR imei=NULL;
+
+	VMBOOL has = vm_gsm_sim_has_card();
+	int id = vm_gsm_sim_get_active_sim_card();
+	imsi = (VMSTR)vm_gsm_sim_get_imsi(id);
+	imei = (VMSTR)vm_gsm_sim_get_imei(id);
+	status = vm_gsm_sim_get_card_status(id);
+	VMBOOL smsReady = vm_gsm_sms_is_sms_ready();
+
+	vm_log_debug("battery level is %d\n", LBattery.level());
+
+	if (has == VM_TRUE)
+	{
+		vm_log_info("active sim id = %d, gsm is ready %d\n", id, smsReady);
+		if(imsi != NULL)
+		{
+			vm_log_info("sim imsi = %s",(char*)imsi);
+			vm_log_info("imei = %s",(char*)imei);
+			vm_log_info("sim status = %d",(char*)status);
+		}
+		else
+		{
+			vm_log_info("query sim imsi fail\n");
+		}
+	}
+	else
+	{
+		vm_log_info("no sim \n");
+	}
+
+
+	vm_pmng_register_system_event_callback(handle_sysevt);
 }
 
