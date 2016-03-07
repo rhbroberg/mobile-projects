@@ -43,9 +43,16 @@
 #define PROXY_PORT  80              /* The proxy port */
 #endif
 
+#ifdef USE_TMOBILE
 #define CUST_APN "T-MOBILE"
-#define USING_PROXY VM_TRUE
 #define PROXY_ADDRESS	"92.242.140.21"
+#define USING_PROXY VM_TRUE
+#endif
+
+#define CUST_APN "wholesale"
+#define PROXY_ADDRESS	"0.0.0.0"
+#define USING_PROXY VM_FALSE
+
 #define PROXY_PORT  80              /* The proxy port */
 
 #define VMHTTPS_TEST_DELAY 60000    /* 60 seconds */
@@ -275,7 +282,7 @@ static void https_send_request(VM_TIMER_ID_NON_PRECISE timer_id,
 	else
 	{
 		vm_timer_delete_non_precise(timer_id);
-		vm_timer_create_non_precise(20000, https_send_request, NULL);
+		vm_timer_create_non_precise(4000, https_send_request, NULL);
 		VM_HTTPS_RESULT unused;
 		vm_log_debug("calling send request directly 2nd time around");
 		https_send_request_set_channel_rsp_cb(0, 0, unused);
@@ -285,7 +292,7 @@ static void https_send_request(VM_TIMER_ID_NON_PRECISE timer_id,
 void handle_sysevt(VMINT message, VMINT param) {
 	switch (message) {
 	case VM_EVENT_CREATE:
-		vm_timer_create_non_precise(60000, https_send_request, NULL);
+		vm_timer_create_non_precise(20000, https_send_request, NULL);
 		break;
 
 	case VM_EVENT_QUIT:
