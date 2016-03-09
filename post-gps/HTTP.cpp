@@ -59,7 +59,6 @@
 //#define VMHTTPS_TEST_URL "http://labs.mediatek.com"
 // #define VMHTTPS_TEST_URL "https://io.adafruit.com/api/groups/weather/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&temperature=13&humidity=12&wind=45"
 
-#include "LBattery.h"
 #include "vmpwr.h"
 
 #include "LGPS.h"
@@ -112,7 +111,62 @@ void getGPS()
 }
 
 
-#define VMHTTPS_TEST_URL "http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&status=%c&lat=%f&long=%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d"
+#include "vmgsm_cell.h"
+#include "vmgsm_gprs.h"
+#include "vmgsm_sim.h"
+#include "vmgsm_sms.h"
+
+vm_gsm_cell_info_t g_info; /* cell information data */
+
+#include "LTask.h"
+
+const int
+simStatus()
+{
+	VM_GSM_SIM_STATUS status;
+	VMSTR imsi=NULL;
+	VMSTR imei=NULL;
+
+	 /* Opens the cell when receiving AT command: AT+[1000]Test01 */
+	VMINT result = vm_gsm_cell_open();
+	vm_log_info("open result = %d",result);
+	VMBOOL has = vm_gsm_sim_has_card();
+	VM_GSM_SIM_ID id = vm_gsm_sim_get_active_sim_card();
+	imsi = (VMSTR)vm_gsm_sim_get_imsi(id);
+	imei = (VMSTR)vm_gsm_sim_get_imei(id);
+	status = vm_gsm_sim_get_card_status(id);
+	VMBOOL smsReady = vm_gsm_sms_is_sms_ready();
+	vm_log_info("active sim id = %d, sms is ready %d\n", id, smsReady);
+
+    vm_gsm_cell_get_current_cell_info(&g_info);
+    vm_log_info("ar=%d, bsic=%d, rxlev=%d, mcc=%d, mnc=%d, lac=%d, ci=%d", g_info.arfcn, g_info.bsic, g_info.rxlev, g_info.mcc, g_info.mnc, g_info.lac, g_info.ci);
+
+	if ((has == VM_TRUE) || true)
+	{
+		if(imsi != NULL)
+		{
+			vm_log_info("sim imsi = %s",(char*)imsi);
+			vm_log_info("imei = %s",(char*)imei);
+			vm_log_info("sim status = %d",(char*)status);
+		}
+		else
+		{
+			vm_log_info("query sim imsi fail\n");
+		}
+	}
+	else
+	{
+		vm_log_info("no sim \n");
+	}
+	return g_info.rxlev;
+}
+
+#include "LEDBlinker.h"
+#include "LBattery.h"
+LEDBlinker myBlinker;
+
+
+#define VMHTTPS_TEST_URL "http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&status=%c&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d"
 VMUINT8 g_channel_id;
 VMINT g_read_seg_num;
 
@@ -139,15 +193,22 @@ static void https_send_request_set_channel_rsp_cb(VMUINT32 req_id, VMUINT8 chann
 	}
 
 	vm_log_debug("sending request now");
-#ifdef CAUSE_woe
-	int level = vm_pwr_get_battery_level();
-	VMBOOL charging = vm_pwr_is_charging();
+
+//#define BATTERY_OK
+#ifdef BATTERY_OK
+	int level = LBattery.level();
+	VMBOOL charging = LBattery.isCharging();
 	vm_log_debug("battery level is %d, charging is %d\n", level, charging);
 #endif
 
+	int rxl = simStatus();
 	getGPS();
-	sprintf(myUrl, (VMCSTR) VMHTTPS_TEST_URL, LGPS.get_status(), LGPS.get_latitude(), LGPS.get_longitude(), LGPS.get_altitude(),
-											LGPS.get_course(), LGPS.get_speed(), LGPS.get_position_fix(), LGPS.get_sate_used());
+	sprintf(myUrl, (VMCSTR) VMHTTPS_TEST_URL, LGPS.get_status(),
+			(LGPS.get_ns() == 'S')?"-":"", LGPS.get_latitude(),
+					(LGPS.get_ew() == 'W')? "-": "", LGPS.get_longitude(),
+							LGPS.get_altitude(),
+							LGPS.get_course(), LGPS.get_speed(), LGPS.get_position_fix(), LGPS.get_sate_used(),
+							rxl);
 
 	vm_log_debug((const char *)myUrl);
 
@@ -246,6 +307,11 @@ void set_custom_apn(void) {
 	vm_gsm_gprs_set_customized_apn_info(&apn_info);
 }
 
+unsigned char  mqttDoit(void *);
+#include <LTask.h>
+
+int cycleMe = 0;
+
 static void https_send_request(VM_TIMER_ID_NON_PRECISE timer_id,
 		void* user_data)
 {
@@ -282,24 +348,32 @@ static void https_send_request(VM_TIMER_ID_NON_PRECISE timer_id,
 	else
 	{
 		vm_timer_delete_non_precise(timer_id);
-		vm_timer_create_non_precise(4000, https_send_request, NULL);
+		vm_timer_create_non_precise(10000, https_send_request, NULL);
 		VM_HTTPS_RESULT unused;
 		vm_log_debug("calling send request directly 2nd time around");
 		https_send_request_set_channel_rsp_cb(0, 0, unused);
+		cycleMe++;
+		cycleMe %= 8;
+		myBlinker.change(LEDBlinker::color(cycleMe), 2, 1);
+		//mqttDoit(NULL);
 	}
 }
 
 void handle_sysevt(VMINT message, VMINT param) {
+	// no gsm until VM_EVENT_CELL_INFO_CHANGE received
+	// shutdown GPS when VM_EVENT_CELL_INFO_CHANGE
+	// battery notice on VM_EVENT_LOW_BATTERY
+	vm_log_info("handle_sysevt received %d", message);
 	switch (message) {
 	case VM_EVENT_CREATE:
 		vm_timer_create_non_precise(20000, https_send_request, NULL);
+		myBlinker.start();
 		break;
 
 	case VM_EVENT_QUIT:
 		break;
 	}
 }
-
 
 extern "C"
 {
