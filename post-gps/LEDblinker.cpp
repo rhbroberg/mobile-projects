@@ -10,16 +10,28 @@ ledGo(VM_THREAD_HANDLE thread_handle, void* user_data)
 	((LEDBlinker *)user_data)->go();
 }
 
+void
+postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
+{
+  vm_log_info("alarm %d went off, posting signal", tid);
+  ((LEDBlinker *)user_data)->deleteTimer();
+
+  ((LEDBlinker *)user_data)->wakeup();
+}
+
 LEDBlinker::LEDBlinker(const unsigned short redPin, const unsigned short greenPin, const unsigned short bluePin)
-: _currentColor(green)
-, _currentDuration(3000)
- , _currentRepeat(0)
+ : _currentColor(green)
+ , _onDuration(3000)
+ , _offDuration(3000)
+ , _currentRepeat(1024)
  , _redPin(redPin)
  , _greenPin(greenPin)
  , _bluePin(bluePin)
  , _running(false)
+, _onoff(0)
 {
-	vm_mutex_init(&_colorLock);
+    _signal = vm_signal_create();
+    vm_mutex_init(&_colorLock);
 
 	// 15 green
 	// 12 blue
@@ -44,23 +56,21 @@ LEDBlinker::LEDBlinker(const unsigned short redPin, const unsigned short greenPi
 }
 
 void
-LEDBlinker::change(const LEDBlinker::color newColor, const unsigned short timesPerSec, const unsigned short repeat )
+LEDBlinker::change(const LEDBlinker::color newColor, const unsigned long onDuration, const unsigned long offDuration, const unsigned short repeat )
 {
 	vm_mutex_lock(&_colorLock);
 
+	deleteTimer();
 	_currentColor = newColor;
-	if (timesPerSec > 1000)
-	{
-		_currentDuration = 1;
-	}
-	else
-	{
-		_currentDuration = (int)(1000/timesPerSec);
-	}
+	_onDuration = onDuration;
+	_offDuration = offDuration;
 	_currentRepeat = repeat;
+	_onoff = 0;
 
 	vm_mutex_unlock(&_colorLock);
-	vm_log_info("leds changed to %x @ %d delay for count of %d", (int)_currentColor, _currentDuration, _currentRepeat);
+	vm_log_info("leds changed to %x @ delay (%d, %d) for count of %d", (int)_currentColor, _onDuration, _offDuration, _currentRepeat);
+	vm_signal_post(_signal);
+	vm_log_info("back from posting signal");
 }
 
 void
@@ -89,27 +99,63 @@ LEDBlinker::start()
 }
 
 void
+LEDBlinker::wakeup()
+{
+  vm_signal_post(_signal);
+}
+
+void
+LEDBlinker::deleteTimer()
+{
+  vm_timer_delete_non_precise(_timer);
+  _timer = 0;
+}
+
+void
 LEDBlinker::go()
 {
 	_running = true;
-	int onoff = 0;
 
 	while (_running)
 	{
-	    vm_thread_sleep(_currentDuration);
-	    onoff = 1 - onoff;
+	    vm_log_info("waiting on signal");
 
-	    vm_mutex_lock(&_colorLock);
+	    vm_signal_wait(_signal);
+	    vm_log_info("received signal - leds waking up");
 
-	    if (onoff)
+	    if (_timer > 0)
 	    {
-	    	updateLeds((unsigned short) _currentColor);
-	    }
-	    else
-	    {
-	    	updateLeds((unsigned short) black);
+	      vm_timer_delete_non_precise(_timer);
+	      _timer = 0;
 	    }
 
-	    vm_mutex_unlock(&_colorLock);
+	    if (_currentRepeat > 0)
+	    {
+	        vm_mutex_lock(&_colorLock);
+
+	        _onoff = 1 - _onoff;
+
+	        if (_onoff)
+	          {
+	            vm_log_info("turned led on; setting timer for %d seconds", _onDuration);
+	            updateLeds((unsigned short) _currentColor);
+	            vm_log_info("creating on timer");
+                    _timer = vm_timer_create_non_precise(_onDuration, postMySignal, this);
+                    vm_log_info("on timer created");
+	          }
+	        else
+	          {
+	            updateLeds((unsigned short) black);
+	            if (-- _currentRepeat)
+	            {
+	                vm_log_info("turned led off; setting timer for %d seconds", _offDuration);
+	                _timer = vm_timer_create_non_precise(_offDuration, postMySignal, this);
+	            }
+	          }
+
+	        vm_log_info("unlocking mutex");
+	        vm_mutex_unlock(&_colorLock);
+	        vm_log_info("mutex unlocked");
+	    }
 	}
 }

@@ -8,6 +8,8 @@
 #include "vmthread.h"
 #include "vmdcl.h"
 #include "vmdcl_gpio.h"
+#include "vmtimer.h"
+
 
 class LEDBlinker
 {
@@ -26,23 +28,29 @@ public:
 		white // 111
 	};
 
-	void change(const LEDBlinker::color, const unsigned short timesPerSec, const unsigned short repeat );
+	void change(const LEDBlinker::color, const unsigned long onDelay, const unsigned long offDelay = 0, const unsigned short repeat = 1);
 	void stop();
 	void start();
 	void go();
+	void wakeup();
+	void deleteTimer();
 
 protected:
 	void updateLeds(const unsigned short);
 
 	VMBOOL _running;
-	vm_mutex_t _colorLock;
-	VM_DCL_HANDLE _greenHandle, _blueHandle, _redHandle;
-
-	const unsigned short _redPin, _greenPin, _bluePin;
-	color _currentColor;
-	unsigned int _currentDuration;
+	int _onoff;
+        color _currentColor;
+	unsigned long _onDuration, _offDuration;
 	unsigned short _currentRepeat;
+        const unsigned short _redPin, _greenPin, _bluePin;
+
+        VM_DCL_HANDLE _greenHandle, _blueHandle, _redHandle;
+
 	VM_THREAD_HANDLE _thread;
+	VM_TIMER_ID_NON_PRECISE _timer;
+	VM_SIGNAL_ID _signal;
+        vm_mutex_t _colorLock;
 };
 
 #endif // _LEDBlinker_h

@@ -60,8 +60,10 @@
 // #define VMHTTPS_TEST_URL "https://io.adafruit.com/api/groups/weather/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&temperature=13&humidity=12&wind=45"
 
 #include "vmpwr.h"
-
 #include "LGPS.h"
+#include "LEDBlinker.h"
+#include "LBattery.h"
+LEDBlinker myBlinker;
 
 void getGPS()
 {
@@ -70,7 +72,7 @@ void getGPS()
 
 	if(LGPS.check_online())
 	{
-           // myBlinker.change(LEDBlinker::color(LEDBlinker::red), 10, 1);
+           myBlinker.change(LEDBlinker::color(LEDBlinker::red), 100);
 		utc_date_time = LGPS.get_utc_date_time();
 		sprintf(buffer, (VMCSTR) "GPS UTC:%d-%d-%d  %d:%d:%d\r\n", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4],utc_date_time[5]);
 		vm_log_info((const char *)buffer);
@@ -162,9 +164,6 @@ simStatus()
 	return g_info.rxlev;
 }
 
-#include "LEDBlinker.h"
-#include "LBattery.h"
-LEDBlinker myBlinker;
 
 
 #define VMHTTPS_TEST_URL "http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d"
@@ -253,7 +252,7 @@ static void https_send_read_request_rsp_cb(VMUINT16 request_id, VM_HTTPS_RESULT 
 		vm_https_unset_channel(g_channel_id);
 	} else {
 		vm_log_debug("reply_content:%s", reply_segment);
-		//myBlinker.change(LEDBlinker::color(LEDBlinker::blue), 10, 1);
+		myBlinker.change(LEDBlinker::color(LEDBlinker::blue), 200);
 		ret = vm_https_read_content(request_id, ++g_read_seg_num, 100);
 		if (reply_segment != NULL && (ret != 0)) {
 			vm_log_debug("read_content returned non-zero but reply-segment was non-NULL; cancelling to try again next time");
@@ -355,12 +354,12 @@ static void https_send_request(VM_TIMER_ID_NON_PRECISE timer_id,
 		VM_HTTPS_RESULT unused;
 		vm_log_debug("calling send request directly 2nd time around");
 		https_send_request_set_channel_rsp_cb(0, 0, unused);
+#ifdef NO_MORE
 		cycleMe++;
 		cycleMe %= 8;
-		myBlinker.change(LEDBlinker::color(cycleMe), 3, 1);
-
+		myBlinker.change(LEDBlinker::color(cycleMe), 300, 300, 2);
+#endif
 	}
-
 }
 
 static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id,
@@ -368,7 +367,18 @@ static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id,
 {
   vm_timer_delete_non_precise(timer_id);
   vm_log_debug("trying tcp pathway");
+  myBlinker.change(LEDBlinker::green, 300, 300, 10);
   initTCP();
+  myBlinker.change(LEDBlinker::red, 100, 500, 32);
+}
+
+static void ledtest(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
+{
+  vm_log_debug("ledtest");
+  myBlinker.change(LEDBlinker::green, 300, 300, 10);
+  delay(10000);
+  vm_log_debug("another test");
+  myBlinker.change(LEDBlinker::blue, 100, 500, 10);
 }
 
 void handle_sysevt(VMINT message, VMINT param) {
@@ -378,8 +388,12 @@ void handle_sysevt(VMINT message, VMINT param) {
 	vm_log_info("handle_sysevt received %d", message);
 	switch (message) {
 	case VM_EVENT_CREATE:
+#define USE_HTTP
 #ifdef USE_HTTP
+	  myBlinker.change(LEDBlinker::green, 3000, 3000, 1024);
           vm_timer_create_non_precise(60000, https_send_request, NULL);
+//	  vm_timer_create_non_precise(60000, ledtest, NULL);
+
 #else
           vm_timer_create_non_precise(1000, mqttInit, NULL);
 #endif
