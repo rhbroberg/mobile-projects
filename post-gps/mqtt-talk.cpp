@@ -72,10 +72,67 @@ void MQTT_connect();
 
 uint32_t x=0;
 
-unsigned char
-mqttDoit(void *)
-{
 
+#define APN "wholesale"
+#define USING_PROXY VM_FALSE
+#define PROXY_IP    "0.0.0.0"
+#define PROXY_PORT  80
+
+#include "vmbearer.h"
+static VM_BEARER_HANDLE g_bearer_hdl;
+
+VMINT32 mqttDoit(VM_THREAD_HANDLE thread_handle, void* user_data);
+
+static void rhb_bearer_callback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id, void *user_data)
+{
+    Serial.print("\nin bearer callback\n");
+
+  if (VM_BEARER_WOULDBLOCK == g_bearer_hdl)
+    {
+        g_bearer_hdl = handle;
+    }
+    if (handle == g_bearer_hdl)
+    {
+        switch (event)
+        {
+            case VM_BEARER_DEACTIVATED:
+                break;
+            case VM_BEARER_ACTIVATING:
+                break;
+            case VM_BEARER_ACTIVATED:
+                vm_thread_create(mqttDoit, NULL, 0);
+                break;
+            case VM_BEARER_DEACTIVATING:
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void rhb_set_custom_apn(void)
+{
+    VMINT ret;
+    vm_gsm_gprs_apn_info_t apn_info;
+
+    memset(&apn_info, 0, sizeof(apn_info));
+    apn_info.using_proxy = USING_PROXY;
+    strcpy((char *)apn_info.apn, (const char *)APN);
+    strcpy((char *)apn_info.proxy_address, (const char *)PROXY_IP);
+    apn_info.proxy_port = PROXY_PORT;
+    ret = vm_gsm_gprs_set_customized_apn_info(&apn_info);
+}
+
+void
+initTCP()
+{
+    rhb_set_custom_apn();
+    g_bearer_hdl = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, NULL, rhb_bearer_callback, VM_BEARER_IPV4);
+}
+
+VMINT32
+mqttDoit(VM_THREAD_HANDLE thread_handle, void* user_data)
+{
   // Ensure the connection to the MQTT server is alive (this will make the first
   // connection and automatically reconnect when disconnected).  See the MQTT_connect
   // function definition further below.
@@ -83,6 +140,7 @@ mqttDoit(void *)
 
   // this is our 'wait for incoming subscription packets' busy subloop
   // try to spend your time here
+#define NOPE
 #ifdef NOPE
   Adafruit_MQTT_Subscribe *subscription;
   while ((subscription = mqtt.readSubscription(500))) {
@@ -93,15 +151,19 @@ mqttDoit(void *)
   }
 #endif
 
-  // Now we can publish stuff!
-  Serial.print(F("\nSending photocell val "));
-  Serial.print(x);
-  Serial.print("...");
-  if (! photocell.publish(x++)) {
-    Serial.println(F("Failed"));
-  } else {
-    Serial.println(F("OK!"));
-  }
+  while (1)
+    {
+      // Now we can publish stuff!
+      Serial.print(F("\nSending photocell val "));
+      Serial.print(x);
+      Serial.print("...");
+      if (! photocell.publish(x++)) {
+          Serial.println(F("Failed"));
+      } else {
+          Serial.println(F("OK!"));
+      }
+      delay (1000);
+    }
 
   // ping the server to keep the mqtt connection alive
   // NOT required if you are publishing once every KEEPALIVE seconds
@@ -124,7 +186,7 @@ void MQTT_connect() {
 
   Serial.print("Connecting to MQTT... ");
 
-  uint8_t retries = 3;
+  uint8_t retries = 90;
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
        Serial.println(mqtt.connectErrorString(ret));
        Serial.println("Retrying MQTT connection in 5 seconds...");
@@ -133,6 +195,11 @@ void MQTT_connect() {
        retries--;
        if (retries == 0) {
          // basically die and wait for WDT to reset me
+           while (1)
+             {
+               Serial.println("bummer");
+               delay(5000);
+             }
          while (1);
        }
   }

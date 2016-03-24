@@ -70,6 +70,7 @@ void getGPS()
 
 	if(LGPS.check_online())
 	{
+           // myBlinker.change(LEDBlinker::color(LEDBlinker::red), 10, 1);
 		utc_date_time = LGPS.get_utc_date_time();
 		sprintf(buffer, (VMCSTR) "GPS UTC:%d-%d-%d  %d:%d:%d\r\n", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4],utc_date_time[5]);
 		vm_log_info((const char *)buffer);
@@ -166,7 +167,7 @@ simStatus()
 LEDBlinker myBlinker;
 
 
-#define VMHTTPS_TEST_URL "http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&status=%c&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d"
+#define VMHTTPS_TEST_URL "http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d"
 VMUINT8 g_channel_id;
 VMINT g_read_seg_num;
 
@@ -203,7 +204,7 @@ static void https_send_request_set_channel_rsp_cb(VMUINT32 req_id, VMUINT8 chann
 
 	int rxl = simStatus();
 	getGPS();
-	sprintf(myUrl, (VMCSTR) VMHTTPS_TEST_URL, LGPS.get_status(),
+	sprintf(myUrl, (VMCSTR) VMHTTPS_TEST_URL, // LGPS.get_status(),
 			(LGPS.get_ns() == 'S')?"-":"", LGPS.get_latitude(),
 					(LGPS.get_ew() == 'W')? "-": "", LGPS.get_longitude(),
 							LGPS.get_altitude(),
@@ -252,7 +253,7 @@ static void https_send_read_request_rsp_cb(VMUINT16 request_id, VM_HTTPS_RESULT 
 		vm_https_unset_channel(g_channel_id);
 	} else {
 		vm_log_debug("reply_content:%s", reply_segment);
-
+		//myBlinker.change(LEDBlinker::color(LEDBlinker::blue), 10, 1);
 		ret = vm_https_read_content(request_id, ++g_read_seg_num, 100);
 		if (reply_segment != NULL && (ret != 0)) {
 			vm_log_debug("read_content returned non-zero but reply-segment was non-NULL; cancelling to try again next time");
@@ -260,9 +261,9 @@ static void https_send_read_request_rsp_cb(VMUINT16 request_id, VM_HTTPS_RESULT 
 			vm_https_unset_channel(g_channel_id);
 			firstSend = 1;
 		}
-
 	}
 }
+
 static void https_send_read_read_content_rsp_cb(VMUINT16 request_id, VMUINT8 seq_num,
 		VM_HTTPS_RESULT result, VMBOOL more,
 		short int * reply_segment, VMUINT32 reply_segment_len)
@@ -308,6 +309,8 @@ void set_custom_apn(void) {
 }
 
 unsigned char  mqttDoit(void *);
+void initTCP();
+
 #include <LTask.h>
 
 int cycleMe = 0;
@@ -347,16 +350,25 @@ static void https_send_request(VM_TIMER_ID_NON_PRECISE timer_id,
 	}
 	else
 	{
-		vm_timer_delete_non_precise(timer_id);
+            vm_timer_delete_non_precise(timer_id);
 		vm_timer_create_non_precise(10000, https_send_request, NULL);
 		VM_HTTPS_RESULT unused;
 		vm_log_debug("calling send request directly 2nd time around");
 		https_send_request_set_channel_rsp_cb(0, 0, unused);
 		cycleMe++;
 		cycleMe %= 8;
-		myBlinker.change(LEDBlinker::color(cycleMe), 2, 1);
-		//mqttDoit(NULL);
+		myBlinker.change(LEDBlinker::color(cycleMe), 3, 1);
+
 	}
+
+}
+
+static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id,
+                      void* user_data)
+{
+  vm_timer_delete_non_precise(timer_id);
+  vm_log_debug("trying tcp pathway");
+  initTCP();
 }
 
 void handle_sysevt(VMINT message, VMINT param) {
@@ -366,7 +378,11 @@ void handle_sysevt(VMINT message, VMINT param) {
 	vm_log_info("handle_sysevt received %d", message);
 	switch (message) {
 	case VM_EVENT_CREATE:
-		vm_timer_create_non_precise(20000, https_send_request, NULL);
+#ifdef USE_HTTP
+          vm_timer_create_non_precise(60000, https_send_request, NULL);
+#else
+          vm_timer_create_non_precise(1000, mqttInit, NULL);
+#endif
 		myBlinker.start();
 		break;
 
@@ -379,6 +395,7 @@ extern "C"
 {
 void vm_main(void)
 {
+    // maybe want to explicitly reset the gsm radio, since sometimes only a full power cycle seems to fix it?
 	int level = vm_pwr_get_battery_level();
 	VMBOOL charging = vm_pwr_is_charging();
 

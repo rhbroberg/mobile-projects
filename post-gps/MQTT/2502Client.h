@@ -34,11 +34,16 @@ public:
 		int len = 0;
 	  int ret;
 
-	  vm_log_debug("connecting to %s", host);
+	  vm_log_debug("connecting to %s:%d", host, port);
 
 	  _peer = socket(PF_INET, SOCK_STREAM, 0);
 
 	  vm_log_debug("created socket %d", _peer);
+	  if (_peer == -1)
+	    {
+	        return 0;
+	    }
+
 	  addr_in.sin_family = PF_INET;
 	  addr_in.sin_addr.S_un.s_addr = inet_addr(host);
 	  addr_in.sin_port = htons(port);
@@ -49,16 +54,18 @@ public:
 		  _connected = true;
 	  }
 	  vm_log_debug("connection status now %d, return code %d", _connected, ret);
-	  return ret;
+	  return !ret;
   }
 
   virtual size_t write(uint8_t b)
   {
+      vm_log_debug("writing byte %d", b);
 	  return vm_soc_send(_peer, (const char *)&b, 1, 0);
   }
 
   virtual size_t write(const uint8_t *buf, size_t size)
   {
+      vm_log_debug("writing %d bytes '%s'", size, buf);
 	  return vm_soc_send(_peer, (const char *)buf, size, 0);
   }
 
@@ -72,10 +79,13 @@ public:
 	  FD_ZERO(&readfds);
 	  FD_SET(_peer, &readfds);
 
-	  if (vm_soc_select(1, &readfds, 0, 0, &timeout) >= 0)
+	  vm_log_debug("checking if available");
+
+	  if (vm_soc_select(_peer + 1, &readfds, 0, 0, &timeout) >= 0)
 	  {
 	     if (FD_ISSET(_peer, &readfds))
 	     {
+	         vm_log_debug("data is available for reading on fd %d", _peer);
 	         //socket is ready for reading data
 	    	 return 1;
 	     }
@@ -88,22 +98,31 @@ public:
   {
 	  uint8_t b;
 
-	  return vm_soc_recv(_peer, (char *)&b, 1, 0);
+	  int result = vm_soc_recv(_peer, (char *)&b, 1, 0);
+          vm_log_debug("reading byte '%d' returned %d", b, result);
+	  return b;
   }
+
   virtual int read(uint8_t *buf, size_t size)
   {
-	  return vm_soc_recv(_peer, (char *)buf, size, 0);
+	  int result = vm_soc_recv(_peer, (char *)buf, size, 0);
+	      vm_log_debug("read %d bytes returned %d", size, result);
+	  return result;
   }
+
   virtual int peek()
   {
-	  return 0;
+    vm_log_debug("peeking at bytes");
+    return 0;
   }
+
   virtual void flush()
   {
   }
 
   virtual void stop()
   {
+      vm_log_debug("stopping connection on socket %d", _peer);
 	  vm_soc_close_socket(_peer);
 	  _connected = false;
   }
