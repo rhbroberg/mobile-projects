@@ -35,14 +35,6 @@
 #include "vmtimer.h"
 #include "vmgsm_gprs.h"
 
-#ifdef BAD_APN
-/* Configurable macros */
-#define CUST_APN    "cmwap"         /* The APN of your test SIM */
-#define USING_PROXY VM_TRUE         /* Whether your SIM uses proxy */
-#define PROXY_ADDRESS   "10.0.0.172"    /* The proxy address */
-#define PROXY_PORT  80              /* The proxy port */
-#endif
-
 #ifdef USE_TMOBILE
 #define CUST_APN "T-MOBILE"
 #define PROXY_ADDRESS	"92.242.140.21"
@@ -54,10 +46,7 @@
 #define USING_PROXY VM_FALSE
 
 #define PROXY_PORT  80              /* The proxy port */
-
 #define VMHTTPS_TEST_DELAY 60000    /* 60 seconds */
-//#define VMHTTPS_TEST_URL "http://labs.mediatek.com"
-// #define VMHTTPS_TEST_URL "https://io.adafruit.com/api/groups/weather/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&temperature=13&humidity=12&wind=45"
 
 #include "vmpwr.h"
 #include "LGPS.h"
@@ -388,7 +377,7 @@ void handle_sysevt(VMINT message, VMINT param) {
 	vm_log_info("handle_sysevt received %d", message);
 	switch (message) {
 	case VM_EVENT_CREATE:
-//#define USE_HTTP
+#define USE_HTTP
 #ifdef USE_HTTP
 	  myBlinker.change(LEDBlinker::green, 3000, 3000, 1024);
           vm_timer_create_non_precise(60000, https_send_request, NULL);
