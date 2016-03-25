@@ -13,7 +13,7 @@ ledGo(VM_THREAD_HANDLE thread_handle, void* user_data)
 void
 postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
 {
-  vm_log_info("alarm %d went off, posting signal", tid);
+  //vm_log_info("alarm %d went off, posting signal", tid);
   ((LEDBlinker *)user_data)->deleteTimer();
 
   ((LEDBlinker *)user_data)->wakeup();
@@ -70,7 +70,6 @@ LEDBlinker::change(const LEDBlinker::color newColor, const unsigned long onDurat
 	vm_mutex_unlock(&_colorLock);
 	vm_log_info("leds changed to %x @ delay (%d, %d) for count of %d", (int)_currentColor, _onDuration, _offDuration, _currentRepeat);
 	vm_signal_post(_signal);
-	vm_log_info("back from posting signal");
 }
 
 void
@@ -118,10 +117,9 @@ LEDBlinker::go()
 
 	while (_running)
 	{
-	    vm_log_info("waiting on signal");
+	    //vm_log_info("waiting on signal");
 
 	    vm_signal_wait(_signal);
-	    vm_log_info("received signal - leds waking up");
 
 	    if (_timer > 0)
 	    {
@@ -137,25 +135,23 @@ LEDBlinker::go()
 
 	        if (_onoff)
 	          {
-	            vm_log_info("turned led on; setting timer for %d seconds", _onDuration);
+	            //vm_log_info("turned led on; setting timer for %d seconds", _onDuration);
 	            updateLeds((unsigned short) _currentColor);
-	            vm_log_info("creating on timer");
+	            //vm_log_info("creating on timer");
                     _timer = vm_timer_create_non_precise(_onDuration, postMySignal, this);
-                    vm_log_info("on timer created");
+                    //vm_log_info("on timer created");
 	          }
 	        else
 	          {
 	            updateLeds((unsigned short) black);
 	            if (-- _currentRepeat)
 	            {
-	                vm_log_info("turned led off; setting timer for %d seconds", _offDuration);
+	                //vm_log_info("turned led off; setting timer for %d seconds", _offDuration);
 	                _timer = vm_timer_create_non_precise(_offDuration, postMySignal, this);
 	            }
 	          }
 
-	        vm_log_info("unlocking mutex");
 	        vm_mutex_unlock(&_colorLock);
-	        vm_log_info("mutex unlocked");
 	    }
 	}
 }
