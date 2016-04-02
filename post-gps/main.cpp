@@ -30,7 +30,7 @@
 
 
 #include "ResID.h"
-#include "HTTP.h"
+#include "main.h"
 #include "vmhttps.h"
 #include "vmtimer.h"
 #include "vmgsm_gprs.h"
@@ -54,14 +54,31 @@
 #include "LBattery.h"
 LEDBlinker myBlinker;
 
+void
+showBatteryStats()
+{
+  int level = vm_pwr_get_battery_level();
+  VMBOOL charging = vm_pwr_is_charging();
+
+  vm_log_debug("battery level is %d, charging is %d\n", level, charging);
+  if (charging)
+    {
+      myBlinker.change(LEDBlinker::color(LEDBlinker::green), 300);
+    }
+  else
+    {
+      myBlinker.change(LEDBlinker::color(LEDBlinker::green), 100, 200, 3);
+    }
+}
+
 void getGPS()
 {
-	unsigned char *utc_date_time = 0;
-	VMCHAR buffer[50] = {0,};
+        unsigned char *utc_date_time = 0;
+        VMCHAR buffer[50] = {0,};
 
-	if(LGPS.check_online())
-	{
-           myBlinker.change(LEDBlinker::color(LEDBlinker::red), 100);
+        if(LGPS.check_online())
+        {
+            myBlinker.change(LEDBlinker::color(LEDBlinker::red), 100);
 		utc_date_time = LGPS.get_utc_date_time();
 		sprintf(buffer, (VMCSTR) "GPS UTC:%d-%d-%d  %d:%d:%d\r\n", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4],utc_date_time[5]);
 		vm_log_info((const char *)buffer);
@@ -241,7 +258,8 @@ static void https_send_read_request_rsp_cb(VMUINT16 request_id, VM_HTTPS_RESULT 
 		vm_https_unset_channel(g_channel_id);
 	} else {
 		vm_log_debug("reply_content:%s", reply_segment);
-		myBlinker.change(LEDBlinker::color(LEDBlinker::blue), 200);
+	        showBatteryStats();
+//		myBlinker.change(LEDBlinker::color(LEDBlinker::blue), 200);
 		ret = vm_https_read_content(request_id, ++g_read_seg_num, 100);
 		if (reply_segment != NULL && (ret != 0)) {
 			vm_log_debug("read_content returned non-zero but reply-segment was non-NULL; cancelling to try again next time");
@@ -399,11 +417,7 @@ extern "C"
 void vm_main(void)
 {
     // maybe want to explicitly reset the gsm radio, since sometimes only a full power cycle seems to fix it?
-	int level = vm_pwr_get_battery_level();
-	VMBOOL charging = vm_pwr_is_charging();
-
-	vm_log_debug("battery level is %d, charging is %d\n", level, charging);
-
+        showBatteryStats();
 	vm_pmng_register_system_event_callback(handle_sysevt);
 }
 }

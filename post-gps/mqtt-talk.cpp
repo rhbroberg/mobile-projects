@@ -57,11 +57,11 @@ Adafruit_MQTT_Client mqtt(&client, MQTT_SERVER, AIO_SERVERPORT, MQTT_USERNAME, M
 
 // Setup a feed called 'photocell' for publishing.
 // Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
-const char PHOTOCELL_FEED[] PROGMEM = AIO_USERNAME "/feeds/photocell";
+const char PHOTOCELL_FEED[] PROGMEM = AIO_USERNAME "/f/photocell";
 Adafruit_MQTT_Publish photocell = Adafruit_MQTT_Publish(&mqtt, PHOTOCELL_FEED);
 
 // Setup a feed called 'onoff' for subscribing to changes.
-const char ONOFF_FEED[] PROGMEM = AIO_USERNAME "/feeds/onoff";
+const char ONOFF_FEED[] PROGMEM = AIO_USERNAME "/f/onoff";
 Adafruit_MQTT_Subscribe onoffbutton = Adafruit_MQTT_Subscribe(&mqtt, ONOFF_FEED);
 
 /*************************** Sketch Code ************************************/
@@ -136,31 +136,37 @@ mqttDoit(VM_THREAD_HANDLE thread_handle, void* user_data)
   // Ensure the connection to the MQTT server is alive (this will make the first
   // connection and automatically reconnect when disconnected).  See the MQTT_connect
   // function definition further below.
-  MQTT_connect();
+  mqtt.subscribe(&onoffbutton);
 
   // this is our 'wait for incoming subscription packets' busy subloop
   // try to spend your time here
-#define NOPE
-#ifdef NOPE
-  Adafruit_MQTT_Subscribe *subscription;
-  while ((subscription = mqtt.readSubscription(500))) {
-    if (subscription == &onoffbutton) {
-      Serial.print(F("Got: "));
-      Serial.println((char *)onoffbutton.lastread);
-    }
-  }
-#endif
 
   while (1)
     {
+      MQTT_connect();
+
+#define NOPE
+#ifdef NOPE
+  Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(0))) {
+    if (subscription == &onoffbutton) {
+      vm_log_info("Got: ");
+      vm_log_info((char *)onoffbutton.lastread);
+    }
+    else
+      {
+        vm_log_info("received unrecognized subscription?");
+      }
+  }
+#endif
       // Now we can publish stuff!
-      Serial.print(F("\nSending photocell val "));
+      Serial.print("\nSending photocell val ");
       Serial.print(x);
       Serial.print("...");
       if (! photocell.publish(x++)) {
-          Serial.println(F("Failed"));
+          vm_log_info("Failed");
       } else {
-          Serial.println(F("OK!"));
+          vm_log_info("OK!");
       }
       delay (1000);
     }
