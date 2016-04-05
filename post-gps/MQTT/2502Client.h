@@ -65,7 +65,7 @@ public:
 
   virtual size_t write(const uint8_t *buf, size_t size)
   {
-    vm_log_debug("writing %d bytes", size);
+    // vm_log_debug("writing %d bytes", size);
 #ifdef NOISY
     for (int i = 0; i < size; i+=10)
       {
@@ -105,14 +105,14 @@ public:
     uint8_t b;
 
     int result = vm_soc_recv(_peer, (char *)&b, 1, 0);
-    vm_log_debug("reading byte '%d' returned %d", b, result);
+    // vm_log_debug("reading byte '%d' returned %d", b, result);
     return b;
   }
 
   virtual int read(uint8_t *buf, size_t size)
   {
     int result = vm_soc_recv(_peer, (char *)buf, size, 0);
-    vm_log_debug("read %d bytes returned %d", size, result);
+    // vm_log_debug("read %d bytes returned %d", size, result);
     return result;
   }
 
