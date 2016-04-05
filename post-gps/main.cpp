@@ -41,6 +41,53 @@
 #include "LBattery.h"
 LEDBlinker myBlinker;
 
+#include "vmtag.h"
+#include "vmchset.h"
+#include "vmmemory.h"
+
+void
+getAppInfo(void)
+{
+  VMINT appVersion = 0;
+  VMWSTR appName = NULL; // Application Name is VMWSTR
+  VMUINT reqSize = sizeof(appVersion);
+
+  vm_log_info("retrieving application info");
+
+  // Application version is VMINT, always 4 bytes.
+  if (VM_IS_SUCCEEDED(vm_tag_get_tag(NULL,
+          VM_TAG_ID_VERSION,
+          &appVersion,
+          &reqSize)))
+  {
+    vm_log_info(
+        "version=%d.%d.%d", (appVersion >> 8) & 0xFF, (appVersion >> 16) & 0xFF, (appVersion >> 24) & 0xFF);
+  }
+  // Get required buffer size for Application Name information.
+  if (VM_IS_SUCCEEDED(vm_tag_get_tag(NULL,
+          VM_TAG_ID_APP_NAME,
+          NULL,
+          &reqSize)))
+  {
+    appName = (VMWSTR) vm_calloc(reqSize);
+    if (appName)
+    {
+      if (VM_IS_SUCCEEDED(vm_tag_get_tag(NULL,
+              VM_TAG_ID_APP_NAME,
+              appName,
+              &reqSize)))
+      {
+        char *name = (char *) vm_calloc(reqSize + 1);
+        vm_chset_ucs2_to_ascii((VMSTR) name, reqSize, (VMWSTR) appName);
+        vm_log_info("application name is '%s'", name);
+        // free it when reserved
+        vm_free(name);
+        vm_free(appName);
+      }
+    }
+  }
+}
+
 void
 showBatteryStats()
 {
@@ -58,52 +105,32 @@ showBatteryStats()
     }
 }
 
-void getGPS()
+void
+getGPS()
 {
   unsigned char *utc_date_time = 0;
-  VMCHAR buffer[50] = {0,};
 
-  if(LGPS.check_online())
-    {
-      myBlinker.change(LEDBlinker::color(LEDBlinker::red), 100);
-      utc_date_time = LGPS.get_utc_date_time();
-      sprintf(buffer, (VMCSTR) "GPS UTC:%d-%d-%d  %d:%d:%d\r\n", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4],utc_date_time[5]);
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS status is %c\r\n", LGPS.get_status());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS latitude is %c:%f\r\n", LGPS.get_ns(), LGPS.get_latitude());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS longitude is %c:%f\r\n", LGPS.get_ew(), LGPS.get_longitude());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS speed is %f\r\n", LGPS.get_speed());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS course is %f\r\n", LGPS.get_course());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS position fix is %c\r\n", LGPS.get_position_fix());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS sate used is %d\r\n", LGPS.get_sate_used());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS altitude is %f\r\n", LGPS.get_altitude());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS mode is %c\r\n", LGPS.get_mode());
-      vm_log_info((const char *)buffer);
-
-      sprintf(buffer, (VMCSTR) "GPS mode2 is %c\r\n", LGPS.get_mode2());
-      vm_log_info((const char *)buffer);
-    }
+  if (LGPS.check_online())
+  {
+    myBlinker.change(LEDBlinker::color(LEDBlinker::red), 100);
+    utc_date_time = LGPS.get_utc_date_time();
+    vm_log_info(
+        "GPS UTC:%d-%d-%d  %d:%d:%d", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4], utc_date_time[5]);
+    vm_log_info("GPS status is %c", LGPS.get_status());
+    vm_log_info("GPS latitude is %c:%f", LGPS.get_ns(), LGPS.get_latitude());
+    vm_log_info("GPS longitude is %c:%f", LGPS.get_ew(), LGPS.get_longitude());
+    vm_log_info("GPS speed is %f", LGPS.get_speed());
+    vm_log_info("GPS course is %f", LGPS.get_course());
+    vm_log_info("GPS position fix is %c", LGPS.get_position_fix());
+    vm_log_info("GPS sate used is %d", LGPS.get_sate_used());
+    vm_log_info("GPS altitude is %f", LGPS.get_altitude());
+    vm_log_info("GPS mode is %c", LGPS.get_mode());
+    vm_log_info("GPS mode2 is %c", LGPS.get_mode2());
+  }
   else
-    {
-      vm_log_info("gps not online yet");
-    }
+  {
+    vm_log_info("gps not online yet");
+  }
 }
 
 
@@ -226,6 +253,12 @@ void handle_sysevt(VMINT message, VMINT param) {
     myBlinker.start();
     break;
 
+  case VM_EVENT_CELL_INFO_CHANGE:
+  /* After opening the cell, this event will occur when the cell info changes.
+   * The new data of the cell info can be obtained from here. */
+    simStatus();
+    break;
+
   case VM_EVENT_QUIT:
     break;
   }
@@ -236,6 +269,7 @@ extern "C"
   void vm_main(void)
   {
     // maybe want to explicitly reset the gsm radio, since sometimes only a full power cycle seems to fix it?
+    getAppInfo();
     showBatteryStats();
     vm_pmng_register_system_event_callback(handle_sysevt);
   }
