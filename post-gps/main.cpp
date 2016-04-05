@@ -241,7 +241,7 @@ void handle_sysevt(VMINT message, VMINT param) {
   vm_log_info("handle_sysevt received %d", message);
   switch (message) {
   case VM_EVENT_CREATE:
-#define USE_HTTP
+//#define USE_HTTP
 #ifdef USE_HTTP
     myBlinker.change(LEDBlinker::green, 3000, 3000, 1024);
     //	  vm_timer_create_non_precise(60000, ledtest, NULL);

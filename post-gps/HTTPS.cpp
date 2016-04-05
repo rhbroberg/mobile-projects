@@ -3,7 +3,6 @@
 #include "vmhttps.h"
 #include "vmgsm_gprs.h"
 #include "stdio.h"
-#include "string.h"
 
 VMUINT8 g_channel_id;
 VMINT g_read_seg_num;

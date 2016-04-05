@@ -54,6 +54,13 @@ public:
         _connected = true;
       }
     vm_log_debug("connection status now %d, return code %d", _connected, ret);
+
+#ifdef CALL_FAILS
+    SOCKADDR myaddr;
+    int mylen;
+    VM_SOC_RESULT result = (VM_SOC_RESULT) vm_soc_getsockname(_peer, &myaddr, &mylen);
+    vm_log_debug("my ip address is %s/%d (%d)", vm_soc_inet_ntoa(((SOCKADDR_IN *)&myaddr)->sin_addr), ((SOCKADDR_IN *)&myaddr)->sin_port, result);
+#endif
     return !ret;
   }
 
@@ -91,7 +98,7 @@ public:
       {
         if (FD_ISSET(_peer, &readfds))
           {
-            vm_log_debug("data is available for reading on fd %d", _peer);
+            //vm_log_debug("data is available for reading on fd %d", _peer);
             //socket is ready for reading data
             return 1;
           }
