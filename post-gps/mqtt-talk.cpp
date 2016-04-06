@@ -10,204 +10,235 @@
 
 #include "mqtt-eg.h"
 #include "Client.h"
+#include "MQTTnative.h"
+
+VM_BEARER_HANDLE MQTTnative::g_bearer_hdl; // must be visible to bearerCallback static function
+
+MQTTnative::MQTTnative(const char *host, const char *username, const char *key,
+		const unsigned int port) :
+		_mqtt(&_client, host, port, username, key), _host(host), _username(
+				username), _key(key), _port(port), _timeout(10000) // 10 seconds
+{
+	vm_mutex_init(&_connectionLock);
+}
+
+void MQTTnative::setTimeout(const unsigned int timeout)
+{
+	_timeout = timeout;
+}
 
 /***************************************************
-  Adafruit MQTT Library ESP8266 Example
+ Adafruit MQTT Library ESP8266 Example
 
-  Must use ESP8266 Arduino from:
-    https://github.com/esp8266/Arduino
+ Must use ESP8266 Arduino from:
+ https://github.com/esp8266/Arduino
 
-  Works great with Adafruit's Huzzah ESP board & Feather
-  ----> https://www.adafruit.com/product/2471
-  ----> https://www.adafruit.com/products/2821
+ Works great with Adafruit's Huzzah ESP board & Feather
+ ----> https://www.adafruit.com/product/2471
+ ----> https://www.adafruit.com/products/2821
 
-  Adafruit invests time and resources providing this open source code,
-  please support Adafruit and open-source hardware by purchasing
-  products from Adafruit!
+ Adafruit invests time and resources providing this open source code,
+ please support Adafruit and open-source hardware by purchasing
+ products from Adafruit!
 
-  Written by Tony DiCola for Adafruit Industries.
-  MIT license, all text above must be included in any redistribution
+ Written by Tony DiCola for Adafruit Industries.
+ MIT license, all text above must be included in any redistribution
  ****************************************************/
 #include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
 
 /************************* Adafruit.io Setup *********************************/
 
-//#define AIO_SERVER      "io.adafruit.com"
-#define AIO_SERVER		"52.5.238.97"
-#define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define AIO_USERNAME    "rhbroberg"
-#define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
-
-/************ Global State (you don't need to change this!) ******************/
-
-// Store the MQTT server, username, and password in flash memory.
-// This is required for using the Adafruit MQTT library.
-const char MQTT_SERVER[] PROGMEM    = AIO_SERVER;
-const char MQTT_USERNAME[] PROGMEM  = AIO_USERNAME;
-const char MQTT_PASSWORD[] PROGMEM  = AIO_KEY;
-
-#include "2502Client.h"
-my2502Client client;
-
-// Setup the MQTT client class by passing in the WiFi client and MQTT server and login details.
-Adafruit_MQTT_Client mqtt(&client, MQTT_SERVER, AIO_SERVERPORT, MQTT_USERNAME, MQTT_PASSWORD);
-
 /****************************** Feeds ***************************************/
 
-// Setup a feed called 'photocell' for publishing.
-// Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
-const char PHOTOCELL_FEED[] PROGMEM = AIO_USERNAME "/f/photocell";
-Adafruit_MQTT_Publish photocell = Adafruit_MQTT_Publish(&mqtt, PHOTOCELL_FEED);
-
-// Setup a feed called 'onoff' for subscribing to changes.
-const char ONOFF_FEED[] PROGMEM = AIO_USERNAME "/f/onoff";
-Adafruit_MQTT_Subscribe onoffbutton = Adafruit_MQTT_Subscribe(&mqtt, ONOFF_FEED);
-
-/*************************** Sketch Code ************************************/
-
-// Bug workaround for Arduino 1.6.6, it seems to need a function declaration
-// for some reason (only affects ESP8266, likely an arduino-builder bug).
-void MQTT_connect();
-
-uint32_t x=0;
-
-
-#define APN "wholesale"
-#define USING_PROXY VM_FALSE
-#define PROXY_IP    "0.0.0.0"
-#define PROXY_PORT  80
-
-#include "vmbearer.h"
-static VM_BEARER_HANDLE g_bearer_hdl;
-
-VMINT32 mqttDoit(VM_THREAD_HANDLE thread_handle, void* user_data);
-
-static void rhb_bearer_callback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id, void *user_data)
+// static
+void MQTTnative::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event,
+		VMUINT data_account_id, void *user_data)
 {
-    Serial.print("\nin bearer callback\n");
+	Serial.print("\nin bearer callback\n");
+	MQTTnative *This = (MQTTnative *) user_data;
 
-  if (VM_BEARER_WOULDBLOCK == g_bearer_hdl)
-    {
-        g_bearer_hdl = handle;
-    }
-    if (handle == g_bearer_hdl)
-    {
-        switch (event)
-        {
-            case VM_BEARER_DEACTIVATED:
-                break;
-            case VM_BEARER_ACTIVATING:
-                break;
-            case VM_BEARER_ACTIVATED:
-                vm_thread_create(mqttDoit, NULL, 0);
-                break;
-            case VM_BEARER_DEACTIVATING:
-                break;
-            default:
-                break;
-        }
-    }
+	if (VM_BEARER_WOULDBLOCK == This->g_bearer_hdl)
+	{
+		This->g_bearer_hdl = handle;
+	}
+	if (handle == This->g_bearer_hdl)
+	{
+		switch (event)
+		{
+		case VM_BEARER_DEACTIVATED:
+			break;
+		case VM_BEARER_ACTIVATING:
+			break;
+		case VM_BEARER_ACTIVATED:
+			vm_thread_create(MQTTnative::networkReady, This, 0);
+			break;
+		case VM_BEARER_DEACTIVATING:
+			break;
+		default:
+			break;
+		}
+	}
 }
 
-void rhb_set_custom_apn(void)
+VMINT MQTTnative::setAPN(const char *apn, const char *proxy,
+		const bool useProxy, const unsigned int proxyPort)
 {
-    VMINT ret;
-    vm_gsm_gprs_apn_info_t apn_info;
+	VMINT ret;
+	vm_gsm_gprs_apn_info_t apn_info;
 
-    memset(&apn_info, 0, sizeof(apn_info));
-    apn_info.using_proxy = USING_PROXY;
-    strcpy((char *)apn_info.apn, (const char *)APN);
-    strcpy((char *)apn_info.proxy_address, (const char *)PROXY_IP);
-    apn_info.proxy_port = PROXY_PORT;
-    ret = vm_gsm_gprs_set_customized_apn_info(&apn_info);
+	memset(&apn_info, 0, sizeof(apn_info));
+	apn_info.using_proxy = useProxy;
+	strcpy((char *) apn_info.apn, apn);
+	strcpy((char *) apn_info.proxy_address, (const char *) proxy);
+	apn_info.proxy_port = proxyPort;
+	ret = vm_gsm_gprs_set_customized_apn_info(&apn_info);
+
+	return ret;
 }
 
-void
-initTCP()
+void MQTTnative::start()
 {
-    rhb_set_custom_apn();
-    g_bearer_hdl = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, NULL, rhb_bearer_callback, VM_BEARER_IPV4);
+	g_bearer_hdl = vm_bearer_open(
+			VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, this,
+			MQTTnative::bearerCallback, VM_BEARER_IPV4);
 }
 
-VMINT32
-mqttDoit(VM_THREAD_HANDLE thread_handle, void* user_data)
+void MQTTnative::stop()
 {
-  // Ensure the connection to the MQTT server is alive (this will make the first
-  // connection and automatically reconnect when disconnected).  See the MQTT_connect
-  // function definition further below.
-  mqtt.subscribe(&onoffbutton);
+	_isRunning = false;
+}
 
-  // this is our 'wait for incoming subscription packets' busy subloop
-  // try to spend your time here
+void *
+MQTTnative::topicHandle(const char *topic)
+{
+	// Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
+	char topicName[512];
+	sprintf(topicName, "%s/f/%s", _username, topic);
+	char *leakyTopic = strdup(topicName); // yes virginia i do leak!.  adafruit implementation shallow copies the topic string
+	Adafruit_MQTT_Publish *feed = new Adafruit_MQTT_Publish(&_mqtt, leakyTopic);
 
-  while (1)
-    {
-      MQTT_connect();
+	return feed;
+}
 
-#define NOPE
+int MQTTnative::publish(void *topic, VMSTR message)
+{
+	vm_mutex_lock(&_connectionLock);
+
+	connect();
+
+	// Now we can publish stuff!
+	Serial.print((char *) message);
+
+	int result = ((Adafruit_MQTT_Publish *) topic)->publish(
+			(const char *) message);
+	vm_mutex_unlock(&_connectionLock);
+
+	return result;
+}
+
+void *
+MQTTnative::subscribe(const char *topic)
+{
+
+}
+
+// static
+VMINT32 MQTTnative::networkReady(VM_THREAD_HANDLE thread_handle,
+		void* user_data)
+{
+	((MQTTnative *) user_data)->go();
+}
+
+const bool MQTTnative::ready()
+{
+	return _mqtt.connected();
+}
+
+void MQTTnative::go()
+{
+	_isRunning = true;
+//#define NOPE
 #ifdef NOPE
-  Adafruit_MQTT_Subscribe *subscription;
-  while ((subscription = mqtt.readSubscription(0))) {
-    if (subscription == &onoffbutton) {
-      vm_log_info("Got: ");
-      vm_log_info((char *)onoffbutton.lastread);
-    }
-    else
-      {
-        vm_log_info("received unrecognized subscription?");
-      }
-  }
+	// Setup a feed called 'onoff' for subscribing to changes.
+	char subTopic[512];
+	sprintf(subTopic, "%s/f/onoff", _username);
+	Adafruit_MQTT_Subscribe onoffbutton = Adafruit_MQTT_Subscribe(&_mqtt, subTopic);
+	_mqtt.subscribe(&onoffbutton);
 #endif
-      // Now we can publish stuff!
-      Serial.print("\nSending photocell val ");
-      Serial.print(x);
-      Serial.print("...");
-      if (! photocell.publish(x++)) {
-          vm_log_info("Failed");
-      } else {
-          vm_log_info("OK!");
-      }
-      delay (1000);
-    }
 
-  // ping the server to keep the mqtt connection alive
-  // NOT required if you are publishing once every KEEPALIVE seconds
-  /*
-  if(! mqtt.ping()) {
-    mqtt.disconnect();
-  }
-  */
+	// this is our 'wait for incoming subscription packets' busy subloop
+	// try to spend your time here
+
+	while (_isRunning)
+	{
+		// Ensure the connection to the MQTT server is alive (this will make the first
+		// connection and automatically reconnect when disconnected).  See the MQTT_connect
+		// function definition further below.
+		vm_mutex_lock(&_connectionLock);
+		vm_log_info("go: in main loop");
+		connect();
+
+#ifdef NOPE
+		Adafruit_MQTT_Subscribe *subscription;
+		while ((subscription = _mqtt.readSubscription(0)))
+		{
+			if (subscription == &onoffbutton)
+			{
+				vm_log_info("Got: ");
+				vm_log_info((char *)onoffbutton.lastread);
+			}
+			else
+			{
+				vm_log_info("received unrecognized subscription?");
+			}
+		}
+#endif
+		vm_mutex_unlock(&_connectionLock);
+
+		delay(_timeout);
+	}
+
+	// ping the server to keep the mqtt connection alive
+	// NOT required if you are publishing once every KEEPALIVE seconds
+	/*
+	 if(! mqtt.ping()) {
+	 mqtt.disconnect();
+	 }
+	 */
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
 // Should be called in the loop function and it will take care if connecting.
-void MQTT_connect() {
-  int8_t ret;
+void MQTTnative::connect()
+{
+	int8_t ret;
 
-  // Stop if already connected.
-  if (mqtt.connected()) {
-    return;
-  }
+	// Stop if already connected.
+	if (_mqtt.connected())
+	{
+		return;
+	}
 
-  Serial.print("Connecting to MQTT... ");
+	Serial.print("Connecting to MQTT... ");
 
-  uint8_t retries = 90;
-  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
-       Serial.println(mqtt.connectErrorString(ret));
-       Serial.println("Retrying MQTT connection in 5 seconds...");
-       mqtt.disconnect();
-       delay(5000);  // wait 5 seconds
-       retries--;
-       if (retries == 0) {
-         // basically die and wait for WDT to reset me
-           while (1)
-             {
-               Serial.println("bummer");
-               delay(5000);
-             }
-         while (1);
-       }
-  }
-  Serial.println("MQTT Connected!");
+	uint8_t retries = 90;
+	while ((ret = _mqtt.connect()) != 0)
+	{ // connect will return 0 for connected
+		Serial.println(_mqtt.connectErrorString(ret));
+		Serial.println("Retrying MQTT connection in 5 seconds...");
+		_mqtt.disconnect();
+		delay(5000); // wait 5 seconds
+		retries--;
+		if (retries == 0)
+		{
+			// basically die and wait for WDT to reset me
+			while (1)
+			{
+				// much more reasonable is to continue trying while data is logging
+				Serial.println("bummer");
+				delay(5000);
+			}
+		}
+	}
+	Serial.println("MQTT Connected!");
 }

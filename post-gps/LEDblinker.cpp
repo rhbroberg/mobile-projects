@@ -4,14 +4,16 @@
 #include "vmdcl.h"
 #include "vmdcl_gpio.h"
 
+// static
 VMINT32
-ledGo(VM_THREAD_HANDLE thread_handle, void* user_data)
+LEDBlinker::ledGo(VM_THREAD_HANDLE thread_handle, void* user_data)
 {
 	((LEDBlinker *)user_data)->go();
 }
 
+// static
 void
-postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
+LEDBlinker::postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
 {
   //vm_log_info("alarm %d went off, posting signal", tid);
   ((LEDBlinker *)user_data)->deleteTimer();
@@ -30,8 +32,8 @@ LEDBlinker::LEDBlinker(const unsigned short redPin, const unsigned short greenPi
  , _running(false)
 , _onoff(0)
 {
-    _signal = vm_signal_create();
-    vm_mutex_init(&_colorLock);
+  _signal = vm_signal_create();
+  vm_mutex_init(&_colorLock);
 
 	// 15 green
 	// 12 blue
@@ -58,7 +60,7 @@ LEDBlinker::LEDBlinker(const unsigned short redPin, const unsigned short greenPi
 void
 LEDBlinker::change(const LEDBlinker::color newColor, const unsigned long onDuration, const unsigned long offDuration, const unsigned short repeat )
 {
-	vm_mutex_lock(&_colorLock);
+  vm_mutex_lock(&_colorLock);
 
 	deleteTimer();
 	_currentColor = newColor;

@@ -17,7 +17,6 @@
  You can change the url by modify macro VMHTTPS_TEST_URL.
  Before run this example, please set the APN information first by modify macros.
  */
-#include <string.h>
 #include "vmtype.h" 
 #include "vmboard.h"
 #include "vmsystem.h"
@@ -105,12 +104,13 @@ showBatteryStats()
     }
 }
 
-void
+const bool
 getGPS()
 {
   unsigned char *utc_date_time = 0;
+  bool status;
 
-  if (LGPS.check_online())
+  if (status = LGPS.check_online())
   {
     myBlinker.change(LEDBlinker::color(LEDBlinker::red), 100);
     utc_date_time = LGPS.get_utc_date_time();
@@ -131,8 +131,8 @@ getGPS()
   {
     vm_log_info("gps not online yet");
   }
+  return status ? (LGPS.get_status() == 'A') : false;
 }
-
 
 #include "vmgsm_cell.h"
 #include "vmgsm_gprs.h"
@@ -182,10 +182,26 @@ simStatus()
   return g_info.rxlev;
 }
 
-#define VMHTTPS_TEST_URL "http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d"
-unsigned char  mqttDoit(void *);
-void initTCP();
 void https_send_request();
+
+const bool
+createLocationMsg(const char *format, VMSTR message)
+{
+  bool result;
+  int rxl = simStatus();
+
+  if (result = getGPS())
+  {
+  sprintf(message, (VMCSTR) format, // LGPS.get_status(),
+      (LGPS.get_ns() == 'S')?"-":"", LGPS.get_latitude(),
+          (LGPS.get_ew() == 'W')? "-": "", LGPS.get_longitude(),
+              LGPS.get_altitude(),
+              LGPS.get_course(), LGPS.get_speed(), LGPS.get_position_fix(), LGPS.get_sate_used(),
+              rxl);
+  }
+
+  return result;
+}
 
 static void
 myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
@@ -193,14 +209,8 @@ myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
   extern VMCHAR myUrl[1024];
   extern int firstSend;
 
-  int rxl = simStatus();
-  getGPS();
-  sprintf(myUrl, (VMCSTR) VMHTTPS_TEST_URL, // LGPS.get_status(),
-      (LGPS.get_ns() == 'S')?"-":"", LGPS.get_latitude(),
-          (LGPS.get_ew() == 'W')? "-": "", LGPS.get_longitude(),
-              LGPS.get_altitude(),
-              LGPS.get_course(), LGPS.get_speed(), LGPS.get_position_fix(), LGPS.get_sate_used(),
-              rxl);
+  createLocationMsg("http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d",
+        myUrl);
   https_send_request();
 
   if (firstSend)
@@ -215,13 +225,62 @@ myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
     }
 }
 
+#define APN "wholesale"
+#define USING_PROXY VM_FALSE
+#define PROXY_IP    "0.0.0.0"
+#define PROXY_PORT  80
+
+//#define AIO_SERVER      "io.adafruit.com"
+#define AIO_SERVER              "52.5.238.97"
+#define AIO_SERVERPORT  1883                   // use 8883 for SSL
+#define AIO_USERNAME    "rhbroberg"
+#define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
+
+/************ Global State (you don't need to change this!) ******************/
+
+// Store the MQTT server, username, and password in flash memory.
+// This is required for using the Adafruit MQTT library.
+const char MQTT_SERVER[] PROGMEM    = AIO_SERVER;
+const char MQTT_USERNAME[] PROGMEM  = AIO_USERNAME;
+const char MQTT_PASSWORD[] PROGMEM  = AIO_KEY;
+
+#include "MQTTnative.h"
+MQTTnative *portal;
+void *photoHandle = NULL;
+
+static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
+{
+   static VMCHAR locationStatus[1024];
+
+   // set different blinky status lights here; differentiate between gps not online and gps not locked yet
+
+   if (portal->ready())
+   {
+     vm_log_info("portal is ready to send");
+     if (createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d", locationStatus))
+      {
+        vm_log_info("data is ready to publish");
+        if (! portal->publish(photoHandle, locationStatus))
+        {
+          vm_log_info("publish failed");
+        }
+      }
+   }
+}
+
 static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id,
     void* user_data)
 {
   vm_timer_delete_non_precise(timer_id);
-  vm_log_debug("trying tcp pathway");
+  vm_log_debug("using native adafruit connection");
   myBlinker.change(LEDBlinker::green, 300, 300, 10);
-  initTCP();
+
+  portal = new MQTTnative(AIO_SERVER, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
+  portal->setAPN(APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+  portal->setTimeout(15000);
+  portal->start();
+  photoHandle = portal->topicHandle("location");
+
   myBlinker.change(LEDBlinker::red, 100, 500, 32);
 }
 
@@ -241,14 +300,16 @@ void handle_sysevt(VMINT message, VMINT param) {
   vm_log_info("handle_sysevt received %d", message);
   switch (message) {
   case VM_EVENT_CREATE:
-//#define USE_HTTP
+
+    //#define USE_HTTP
 #ifdef USE_HTTP
     myBlinker.change(LEDBlinker::green, 3000, 3000, 1024);
     //	  vm_timer_create_non_precise(60000, ledtest, NULL);
     vm_timer_create_non_precise(60000, myHttpSend, NULL);
 
 #else
-    vm_timer_create_non_precise(1000, mqttInit, NULL);
+    vm_timer_create_non_precise(500, mqttInit, NULL);
+    vm_timer_create_non_precise(1000, logit, NULL);
 #endif
     myBlinker.start();
     break;

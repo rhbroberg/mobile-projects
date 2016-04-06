@@ -51,6 +51,10 @@ protected:
 	VM_TIMER_ID_NON_PRECISE _timer;
 	VM_SIGNAL_ID _signal;
         vm_mutex_t _colorLock;
+
+        static VMINT32 ledGo(VM_THREAD_HANDLE thread_handle, void* user_data);
+        static void postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data);
+
 };
 
 #endif // _LEDBlinker_h
