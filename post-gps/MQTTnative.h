@@ -24,6 +24,7 @@ public:
 	void *subscribe(const char *topic);
 	const bool ready();
 	void connect(); // maybe back to protected
+	void disconnect();
 
 	static VM_BEARER_HANDLE g_bearer_hdl; // must be visible to bearerCallback static function
 

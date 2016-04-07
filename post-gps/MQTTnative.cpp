@@ -8,7 +8,6 @@
 #include "vmthread.h"
 #include "vmres.h"
 
-#include "mqtt-eg.h"
 #include "Client.h"
 #include "MQTTnative.h"
 
@@ -129,8 +128,7 @@ int MQTTnative::publish(void *topic, VMSTR message)
 	// Now we can publish stuff!
 	Serial.print((char *) message);
 
-	int result = ((Adafruit_MQTT_Publish *) topic)->publish(
-			(const char *) message);
+	int result = ((Adafruit_MQTT_Publish *) topic)->publish((const char *) message);
 	vm_mutex_unlock(&_connectionLock);
 
 	return result;
@@ -205,6 +203,12 @@ void MQTTnative::go()
 	 mqtt.disconnect();
 	 }
 	 */
+}
+
+void
+MQTTnative::disconnect()
+{
+	_mqtt.disconnect();
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.

@@ -28,17 +28,17 @@ public:
 		white // 111
 	};
 
-	void change(const LEDBlinker::color, const unsigned long onDelay, const unsigned long offDelay = 0, const unsigned short repeat = 1);
+	void change(const LEDBlinker::color, const unsigned long onDelay, const unsigned long offDelay = 0, const unsigned short repeat = 1, const bool noPreempt = false);
 	void stop();
 	void start();
 	void go();
 	void wakeup();
-	void deleteTimer();
+	void deleteTimer(VM_TIMER_ID_NON_PRECISE = 0);
 
 protected:
 	void updateLeds(const unsigned short);
 
-	VMBOOL _running;
+	VMBOOL _running, _noPreempt;
 	int _onoff;
         color _currentColor;
 	unsigned long _onDuration, _offDuration;
