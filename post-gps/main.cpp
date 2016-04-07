@@ -246,6 +246,29 @@ static void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 VM_FS_HANDLE journal;
 unsigned int publishFailures = 0;
 
+void
+writeJournal(VMSTR line)
+{
+	vm_log_info("writing out journal entry while offline");
+	myBlinker.change(LEDBlinker::blueGreen, 100, 200, 2);
+	VMUINT written;
+	VM_RESULT result;
+
+	char dateLine[19];
+	unsigned char *utc_date_time = LGPS.get_utc_date_time();
+	sprintf((VMSTR) dateLine,
+			(VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ",
+			utc_date_time[0], utc_date_time[1], utc_date_time[2],
+			utc_date_time[3], utc_date_time[4], utc_date_time[5]);
+	result = vm_fs_write(journal, dateLine, strlen(dateLine),
+			&written);
+	result = vm_fs_write(journal, line,
+			strlen((const char *) line), &written);
+	result = vm_fs_write(journal, "\n", 1, &written);
+	result = vm_fs_flush(journal);
+}
+
+
 static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	static VMCHAR locationStatus[1024];
@@ -283,23 +306,7 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 		{
 			if (journal > 0)
 			{
-				vm_log_info("writing out journal entry while offline");
-				myBlinker.change(LEDBlinker::blueGreen, 100, 200, 2);
-				VMUINT written;
-				VM_RESULT result;
-
-				char dateLine[19];
-				unsigned char *utc_date_time = LGPS.get_utc_date_time();
-				sprintf((VMSTR) dateLine,
-						(VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ",
-						utc_date_time[0], utc_date_time[1], utc_date_time[2],
-						utc_date_time[3], utc_date_time[4], utc_date_time[5]);
-				result = vm_fs_write(journal, dateLine, strlen(dateLine),
-						&written);
-				result = vm_fs_write(journal, locationStatus,
-						strlen((const char *) locationStatus), &written);
-				result = vm_fs_write(journal, "\n", 1, &written);
-				result = vm_fs_flush(journal);
+				writeJournal(locationStatus);
 			}
 			else
 			{
@@ -358,6 +365,36 @@ static void ledtest(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	myBlinker.change(LEDBlinker::blue, 100, 500, 10);
 }
 
+#include "vmdcl_kbd.h"
+#include "vmchset.h"
+#include "vmkeypad.h"
+
+VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
+{
+	vm_log_info("key event=%d,key code=%d", event, code);
+	/* event value refer to VM_KEYPAD_EVENT */
+
+	if (code == 30)
+	{
+		if (event == 3)
+		{
+			// long pressed
+			vm_log_debug("key is long\n");
+		}
+		else if (event == 2)
+		{
+			// down
+			vm_log_debug("key is pressed\n");
+		}
+		else if (event == 1)
+		{
+			// up
+			vm_log_debug("key is released\n");
+		}
+		return 0;
+	}
+}
+
 void handle_sysevt(VMINT message, VMINT param)
 {
 	// no gsm until VM_EVENT_CELL_INFO_CHANGE received
@@ -376,7 +413,7 @@ void handle_sysevt(VMINT message, VMINT param)
 
 #else
 		vm_timer_create_non_precise(500, mqttInit, NULL);
-		vm_timer_create_non_precise(1000, logit, NULL);
+		vm_timer_create_non_precise(2000, logit, NULL);
 #endif
 		myBlinker.start();
 		break;
@@ -401,6 +438,7 @@ void vm_main(void)
 	getAppInfo();
 	showBatteryStats();
 	vm_pmng_register_system_event_callback(handle_sysevt);
+    vm_keypad_register_event_callback(handle_keypad_event);
 }
 }
 
