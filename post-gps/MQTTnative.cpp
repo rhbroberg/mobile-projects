@@ -128,7 +128,8 @@ int MQTTnative::publish(void *topic, VMSTR message)
 	// Now we can publish stuff!
 	Serial.print((char *) message);
 
-	int result = ((Adafruit_MQTT_Publish *) topic)->publish((const char *) message);
+	int result = ((Adafruit_MQTT_Publish *) topic)->publish(
+			(const char *) message);
 	vm_mutex_unlock(&_connectionLock);
 
 	return result;
@@ -205,8 +206,7 @@ void MQTTnative::go()
 	 */
 }
 
-void
-MQTTnative::disconnect()
+void MQTTnative::disconnect()
 {
 	_mqtt.disconnect();
 }

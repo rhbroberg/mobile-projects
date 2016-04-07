@@ -149,7 +149,7 @@ const bool getGPS()
 	{
 		vm_log_info("gps not online yet");
 	}
-	return status ? (LGPS.get_sate_used() > 0) : false;  // ridiculous check, but this gps library doesn't let me query if data is valid
+	return status ? (LGPS.get_sate_used() > 0) : false; // ridiculous check, but this gps library doesn't let me query if data is valid
 }
 
 #include "vmgsm_cell.h"
@@ -290,10 +290,12 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 
 				char dateLine[19];
 				unsigned char *utc_date_time = LGPS.get_utc_date_time();
-				sprintf((VMSTR) dateLine, (VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ",
+				sprintf((VMSTR) dateLine,
+						(VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ",
 						utc_date_time[0], utc_date_time[1], utc_date_time[2],
 						utc_date_time[3], utc_date_time[4], utc_date_time[5]);
-				result = vm_fs_write(journal, dateLine, strlen(dateLine), &written);
+				result = vm_fs_write(journal, dateLine, strlen(dateLine),
+						&written);
 				result = vm_fs_write(journal, locationStatus,
 						strlen((const char *) locationStatus), &written);
 				result = vm_fs_write(journal, "\n", 1, &written);
@@ -311,8 +313,7 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	}
 }
 
-void
-openJournal()
+void openJournal()
 {
 	VMCHAR filename[VM_FS_MAX_PATH_LENGTH] =
 	{ 0 };
