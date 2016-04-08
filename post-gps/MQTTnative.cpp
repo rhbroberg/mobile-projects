@@ -11,8 +11,6 @@
 #include "Client.h"
 #include "MQTTnative.h"
 
-VM_BEARER_HANDLE MQTTnative::g_bearer_hdl; // must be visible to bearerCallback static function
-
 MQTTnative::MQTTnative(const char *host, const char *username, const char *key,
 		const unsigned int port) :
 		_mqtt(&_client, host, port, username, key), _host(host), _username(
@@ -49,57 +47,10 @@ void MQTTnative::setTimeout(const unsigned int timeout)
 
 /****************************** Feeds ***************************************/
 
-// static
-void MQTTnative::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event,
-		VMUINT data_account_id, void *user_data)
-{
-	Serial.print("\nin bearer callback\n");
-	MQTTnative *This = (MQTTnative *) user_data;
-
-	if (VM_BEARER_WOULDBLOCK == This->g_bearer_hdl)
-	{
-		This->g_bearer_hdl = handle;
-	}
-	if (handle == This->g_bearer_hdl)
-	{
-		switch (event)
-		{
-		case VM_BEARER_DEACTIVATED:
-			break;
-		case VM_BEARER_ACTIVATING:
-			break;
-		case VM_BEARER_ACTIVATED:
-			vm_thread_create(MQTTnative::networkReady, This, 0);
-			break;
-		case VM_BEARER_DEACTIVATING:
-			break;
-		default:
-			break;
-		}
-	}
-}
-
-VMINT MQTTnative::setAPN(const char *apn, const char *proxy,
-		const bool useProxy, const unsigned int proxyPort)
-{
-	VMINT ret;
-	vm_gsm_gprs_apn_info_t apn_info;
-
-	memset(&apn_info, 0, sizeof(apn_info));
-	apn_info.using_proxy = useProxy;
-	strcpy((char *) apn_info.apn, apn);
-	strcpy((char *) apn_info.proxy_address, (const char *) proxy);
-	apn_info.proxy_port = proxyPort;
-	ret = vm_gsm_gprs_set_customized_apn_info(&apn_info);
-
-	return ret;
-}
-
 void MQTTnative::start()
 {
-	g_bearer_hdl = vm_bearer_open(
-			VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, this,
-			MQTTnative::bearerCallback, VM_BEARER_IPV4);
+	// no-op
+	connect();
 }
 
 void MQTTnative::stop()
@@ -141,13 +92,6 @@ MQTTnative::subscribe(const char *topic)
 
 }
 
-// static
-VMINT32 MQTTnative::networkReady(VM_THREAD_HANDLE thread_handle,
-		void* user_data)
-{
-	((MQTTnative *) user_data)->go();
-}
-
 const bool MQTTnative::ready()
 {
 	return _mqtt.connected();
@@ -156,6 +100,7 @@ const bool MQTTnative::ready()
 void MQTTnative::go()
 {
 	_isRunning = true;
+
 //#define NOPE
 #ifdef NOPE
 	// Setup a feed called 'onoff' for subscribing to changes.

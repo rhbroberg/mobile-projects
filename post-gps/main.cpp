@@ -44,8 +44,8 @@ LEDBlinker myBlinker;
 #define PROXY_IP    "0.0.0.0"
 #define PROXY_PORT  80
 
-//#define AIO_SERVER      "io.adafruit.com"
-#define AIO_SERVER              "52.5.238.97"
+#define AIO_SERVER      "io.adafruit.com"
+//#define AIO_SERVER              "52.5.238.97"
 #define AIO_SERVERPORT  1883                   // use 8883 for SSL
 #define AIO_USERNAME    "rhbroberg"
 #define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
@@ -57,13 +57,13 @@ const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
 const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
 
 #include "MQTTnative.h"
-MQTTnative *portal;
+MQTTnative *portal = NULL;
 void *photoHandle = NULL;
 
 #include "vmtag.h"
-#include "vmchset.h"
 #include "vmmemory.h"
 
+#include "vmchset.h"
 void getAppInfo(void)
 {
 	VMINT appVersion = 0;
@@ -242,32 +242,14 @@ static void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	}
 }
 
-#include "vmfs.h"
-VM_FS_HANDLE journal;
 unsigned int publishFailures = 0;
 
-void
-writeJournal(VMSTR line)
-{
-	vm_log_info("writing out journal entry while offline");
-	myBlinker.change(LEDBlinker::blueGreen, 100, 200, 2);
-	VMUINT written;
-	VM_RESULT result;
+#include "DataJournal.h"
+const char *journalName = "mylog.txt";
+DataJournal _dataJournal((VMCSTR) journalName);
 
-	char dateLine[19];
-	unsigned char *utc_date_time = LGPS.get_utc_date_time();
-	sprintf((VMSTR) dateLine,
-			(VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ",
-			utc_date_time[0], utc_date_time[1], utc_date_time[2],
-			utc_date_time[3], utc_date_time[4], utc_date_time[5]);
-	result = vm_fs_write(journal, dateLine, strlen(dateLine),
-			&written);
-	result = vm_fs_write(journal, line,
-			strlen((const char *) line), &written);
-	result = vm_fs_write(journal, "\n", 1, &written);
-	result = vm_fs_flush(journal);
-}
-
+#include "vmwdt.h"
+VM_WDT_HANDLE watchdog;
 
 static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
@@ -275,17 +257,20 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	bool locationReady;
 
 	// set different blinky status lights here; differentiate between gps not online and gps not locked yet
-
+#ifdef DO_HE_BITE
+	vm_wdt_reset(watchdog);	// loop which checks accelerometer will need to take this task over
+#endif
 	if ((locationReady = createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
 			locationStatus)))
 	{
 		vm_log_info("data is ready to publish");
 
-		if (portal->ready())
+		if (portal && portal->ready())
 		{
 			vm_log_info("portal is ready to send");
 			if (portal->publish(photoHandle, locationStatus))
 			{
+				vm_log_info("publish succeeded");
 				myBlinker.change(LEDBlinker::green, 200);
 			}
 			else
@@ -299,18 +284,35 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 					portal->disconnect();
 					portal->connect();
 					publishFailures = 0;
+					// next, count connect failures, and bounce the bearer if it fails, or restart
 				}
 			}
 		}
 		else
 		{
-			if (journal > 0)
+			vm_log_info("portal not ready yet; archiving data");
+			if (_dataJournal.isValid())
 			{
-				writeJournal(locationStatus);
+				myBlinker.change(LEDBlinker::blueGreen, 100, 200, 2);
+
+				// should really be using the system time, after it's set by the first gps retrieval
+				VMCHAR dateLine[19];
+				unsigned char *utc_date_time = LGPS.get_utc_date_time();
+				sprintf(dateLine,
+						(VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ",
+						utc_date_time[0], utc_date_time[1], utc_date_time[2],
+						utc_date_time[3], utc_date_time[4], utc_date_time[5]);
+				VM_RESULT result = _dataJournal.write(dateLine, false);
+				result |= _dataJournal.write(locationStatus);
+
+				if (result < 0)
+				{
+					vm_log_info("woe: cannot write to logfile: %d", result);
+				}
 			}
 			else
 			{
-				myBlinker.change(LEDBlinker::red, 100, 150, 2);
+				myBlinker.change(LEDBlinker::red, 100, 200, 2);
 			}
 		}
 	}
@@ -320,39 +322,18 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	}
 }
 
-void openJournal()
-{
-	VMCHAR filename[VM_FS_MAX_PATH_LENGTH] =
-	{ 0 };
-	VMWCHAR wfilename[VM_FS_MAX_PATH_LENGTH] =
-	{ 0 };
+char hostIP[16] = {0};
 
-	sprintf(filename, (VMCSTR) "%c:\\%s", vm_fs_get_internal_drive_letter(),
-			"mylog.txt");
-	vm_chset_ascii_to_ucs2(wfilename, sizeof(wfilename), filename);
-
-	if ((journal = vm_fs_open(wfilename, VM_FS_MODE_APPEND, FALSE)) < 0)
-	{
-		if ((journal = vm_fs_open(wfilename, VM_FS_MODE_CREATE_ALWAYS_WRITE,
-				FALSE)) < 0)
-		{
-			vm_log_info("woe creating datafile %s", filename);
-		}
-	}
-}
-
-static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id, void * user_data)
+static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
 	vm_log_debug("using native adafruit connection");
 
-	portal = new MQTTnative(AIO_SERVER, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
-	portal->setAPN(APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+	portal = new MQTTnative(hostIP, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
 	portal->setTimeout(15000);
 	portal->start();
 	photoHandle = portal->topicHandle("location");
 
-	openJournal();
 	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
 }
 
@@ -378,7 +359,7 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 	{
 		if (event == 3)
 		{
-			// long pressed
+			// long pressed; preface to shutdown, so clean up!
 			vm_log_debug("key is long\n");
 		}
 		else if (event == 2)
@@ -395,34 +376,101 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 	}
 }
 
+#include "vmdns.h"
+VM_DNS_HANDLE _dnsHandle; // scope into networkReady?
+
+// move into bearer class?
+// 	static VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result, void *user_data);
+// static
+VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result, void *user_data)
+{
+    sprintf((VMSTR)hostIP, (VMCSTR)"%d.%d.%d.%d", (result->address[0]) & 0xFF, ((result->address[0]) & 0xFF00)>>8, ((result->address[0]) & 0xFF0000)>>16,
+        ((result->address[0]) & 0xFF000000)>>24);
+
+	vm_log_info("dnsCallback complete: %s", hostIP);
+
+    // now start mqtt with resolved name
+	vm_timer_create_non_precise(100, mqttInit, NULL);
+
+	// return VM_FAILURE if all zeros?
+    return VM_SUCCESS;
+}
+
+void
+networkReady(void *user_data)
+{
+	vm_log_info("network is ready in main");
+	static vm_dns_result_t result;  // must persist beyond scope of this function, thus it is static
+
+	// move the bearer stuff into the main event handler, call mqttinit when bearer complete.  what happens if it fails?
+	// only if _host doesn't look like a dotted quad
+	if (1 /* doesn't look like a dotted quad */)
+	{
+		vm_log_info("requesting host resolution for %s", AIO_SERVER);
+
+		_dnsHandle = vm_dns_get_host_by_name(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, (VMSTR) AIO_SERVER, &result, dnsCallback, NULL);
+	}
+	else
+	{
+		vm_timer_create_non_precise(100, mqttInit, NULL);
+	}
+}
+
+#include "NetworkBearer.h"
+NetworkBearer myBearer(networkReady, NULL);
+
+static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
+{
+	vm_timer_delete_non_precise(timer_id);
+	myBlinker.start();
+	getAppInfo();
+#ifdef DO_HE_BITE
+	watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
+#endif
+    vm_log_info("watchdog id is %d", watchdog);
+
+//#define USE_HTTP
+#ifdef USE_HTTP
+	myBlinker.change(LEDBlinker::white, 3000, 3000, 1024);
+	//	  vm_timer_create_non_precise(60000, ledtest, NULL);
+	vm_timer_create_non_precise(60000, myHttpSend, NULL);
+
+#else
+	myBearer.enable(APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+
+	VM_RESULT openStatus;
+	// fix: make sure to set time from gps before opening the log, otherwise rotation won't work
+	if (openStatus = _dataJournal.open() < 0)
+	{
+		vm_log_info("open of data journal '%s' failed: %d", journalName, openStatus);
+	}
+
+	vm_timer_create_non_precise(1000, logit, NULL);
+#endif
+
+	// showBatteryStats(); overwrites led status, need to move elsewhere
+}
+
 void handle_sysevt(VMINT message, VMINT param)
 {
-	// no gsm until VM_EVENT_CELL_INFO_CHANGE received
-	// shutdown GPS when VM_EVENT_CELL_INFO_CHANGE
-	// battery notice on VM_EVENT_LOW_BATTERY
 	vm_log_info("handle_sysevt received %d", message);
 	switch (message)
 	{
-	case VM_EVENT_CREATE:
-
-		//#define USE_HTTP
-#ifdef USE_HTTP
-		myBlinker.change(LEDBlinker::white, 3000, 3000, 1024);
-		//	  vm_timer_create_non_precise(60000, ledtest, NULL);
-		vm_timer_create_non_precise(60000, myHttpSend, NULL);
-
-#else
-		vm_timer_create_non_precise(500, mqttInit, NULL);
-		vm_timer_create_non_precise(2000, logit, NULL);
-#endif
-		myBlinker.start();
+//	case VM_EVENT_CREATE:
+	case VM_EVENT_PAINT:
+		vm_timer_create_non_precise(50, startMe, NULL);
 		break;
 
 	case VM_EVENT_CELL_INFO_CHANGE:
 		/* After opening the cell, this event will occur when the cell info changes.
 		 * The new data of the cell info can be obtained from here. */
-		myBlinker.change(LEDBlinker::blue, 1000, 500, 3, true);
+		myBlinker.change(LEDBlinker::blue, 750, 500, 3, true);
 		simStatus();
+		break;
+
+	case VM_EVENT_LOW_BATTERY:
+		// battery low!
+		myBlinker.change(LEDBlinker::red, 100, 100, 20, true);
 		break;
 
 	case VM_EVENT_QUIT:
@@ -435,8 +483,6 @@ extern "C"
 void vm_main(void)
 {
 	// maybe want to explicitly reset the gsm radio, since sometimes only a full power cycle seems to fix it?
-	getAppInfo();
-	showBatteryStats();
 	vm_pmng_register_system_event_callback(handle_sysevt);
     vm_keypad_register_event_callback(handle_keypad_event);
 }

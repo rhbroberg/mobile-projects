@@ -13,7 +13,7 @@ VMINT32 LEDBlinker::ledGo(VM_THREAD_HANDLE thread_handle, void* user_data)
 // static
 void LEDBlinker::postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
 {
-	// vm_log_info("timer %d went off, posting signal", tid);
+	vm_log_info("timer %d went off, posting signal", tid);
 	// if we attempt to delete a timer before it goes off the first time, the deletion fails - clearly a library defect
 	// next time it goes off here, update the timer id state and allow it to go away
 	((LEDBlinker *) user_data)->deleteTimer(tid);
@@ -58,21 +58,28 @@ void LEDBlinker::change(const LEDBlinker::color newColor,
 {
 	if (!_noPreempt) // yes it is checked outside of the mutex lock!
 	{
-		vm_mutex_lock(&_colorLock);
-		vm_log_info(
-				"changing leds to %x @ delay (%d, %d) for count of %d", (int)_currentColor, _onDuration, _offDuration, _currentRepeat);
+		if (_running)
+		{
+			vm_mutex_lock(&_colorLock);
+			vm_log_info(
+					"changing leds to %x @ delay (%d, %d) for count of %d", (int)_currentColor, _onDuration, _offDuration, _currentRepeat);
 
-		deleteTimer(_timer); // yes, passing this argument is necessary, even tho it's member data
+			deleteTimer(_timer); // yes, passing this argument is necessary, even tho it's member data
 
-		_currentColor = newColor;
-		_onDuration = onDuration;
-		_offDuration = offDuration;
-		_currentRepeat = repeat;
-		_onoff = 0;
-		_noPreempt = noPreempt;
+			_currentColor = newColor;
+			_onDuration = onDuration;
+			_offDuration = offDuration;
+			_currentRepeat = repeat;
+			_onoff = 0;
+			_noPreempt = noPreempt;
 
-		vm_mutex_unlock(&_colorLock);
-		vm_signal_post(_signal);
+			vm_mutex_unlock(&_colorLock);
+			vm_signal_post(_signal);
+		}
+		else
+		{
+			vm_log_info("led system not yet online, discarding change request");
+		}
 	}
 	else
 	{
@@ -107,8 +114,16 @@ void LEDBlinker::stop()
 
 void LEDBlinker::start()
 {
-	vm_log_info("leds starting");
-	_thread = vm_thread_create(ledGo, this, 126);
+	if (!_running)
+	{
+		vm_log_info("leds starting");
+		_thread = vm_thread_create(ledGo, this, 126);
+		wakeup();
+	}
+	else
+	{
+		vm_log_info("leds already running, you ninny");
+	}
 }
 
 void LEDBlinker::wakeup()
@@ -120,7 +135,7 @@ void LEDBlinker::deleteTimer(VM_TIMER_ID_NON_PRECISE thisTimer)
 {
 	if (thisTimer > 0)
 	{
-		//vm_log_info("deleting timer %d", thisTimer);
+		vm_log_info("deleting timer %d", thisTimer);
 		VM_RESULT r = vm_timer_delete_non_precise(thisTimer);
 		if (r)
 		{
@@ -155,7 +170,7 @@ void LEDBlinker::go()
 				updateLeds((unsigned short) _currentColor);
 				_timer = vm_timer_create_non_precise(_onDuration, postMySignal,
 						this);
-				// vm_log_info("turned led on; setting timer %d for %d ms", _timer, _onDuration);
+				vm_log_info("turned led on; setting timer %d for %d ms", _timer, _onDuration);
 			}
 			else
 			{
@@ -164,7 +179,7 @@ void LEDBlinker::go()
 				{
 					_timer = vm_timer_create_non_precise(_offDuration,
 							postMySignal, this);
-					// vm_log_info("turned led off; setting timer %d for %d ms", _timer, _offDuration);
+					vm_log_info("turned led off; setting timer %d for %d ms", _timer, _offDuration);
 				}
 				else
 				{
