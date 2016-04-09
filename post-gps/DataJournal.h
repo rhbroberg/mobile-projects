@@ -9,7 +9,7 @@ public:
 
 	DataJournal(VMCSTR filename);
 	const VM_RESULT open();
-	const VM_RESULT write(VMCSTR line, const bool lineDone = true);
+	const VM_RESULT write(VMCSTR line);
 	void close();
 	const bool isValid() const;
 

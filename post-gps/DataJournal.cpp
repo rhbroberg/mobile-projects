@@ -35,21 +35,22 @@ DataJournal::open()
 }
 
 const VM_RESULT
-DataJournal::write(VMCSTR line, const bool lineDone)
+DataJournal::write(VMCSTR line)
 {
+	static char timeS[21];
 	vm_log_info("offline journal entry");
 	VMUINT written;
 	VM_RESULT result;
 
-	result |= vm_fs_write(_journal, line, strlen((const char *) line), &written);
+	vm_date_time_t now;
+	vm_time_get_date_time(&now);//return value:-1:failed, time is null;  0:success
 
-	// check if written != line length here
-	if (lineDone)
-	{
-		result |= vm_fs_write(_journal, "\n", 1, &written);
-		// check if written != line length here
-		result |= vm_fs_flush(_journal);
-	}
+    sprintf((VMSTR) timeS, (VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ", now.year, now.month, now.day, now.hour, now.minute, now.second);
+
+	result |= vm_fs_write(_journal, timeS, strlen((const char *) timeS), &written);
+	result |= vm_fs_write(_journal, line, strlen((const char *) line), &written);
+	result |= vm_fs_write(_journal, "\n", 1, &written);
+	result |= vm_fs_flush(_journal);
 
 	return result;
 }

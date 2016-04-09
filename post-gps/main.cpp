@@ -56,55 +56,13 @@ const char MQTT_SERVER[] PROGMEM = AIO_SERVER;
 const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
 const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
 
+// maybe move this into a method in the gps class instead
+#include "RealTimeClock.h"
+RealTimeClock _rtc;
+
 #include "MQTTnative.h"
 MQTTnative *portal = NULL;
 void *photoHandle = NULL;
-
-#include "vmtag.h"
-#include "vmmemory.h"
-
-#include "vmchset.h"
-void getAppInfo(void)
-{
-	VMINT appVersion = 0;
-	VMWSTR appName = NULL; // Application Name is VMWSTR
-	VMUINT reqSize = sizeof(appVersion);
-
-	vm_log_info("retrieving application info");
-
-	// Application version is VMINT, always 4 bytes.
-	if (VM_IS_SUCCEEDED(vm_tag_get_tag(NULL,
-					VM_TAG_ID_VERSION,
-					&appVersion,
-					&reqSize)))
-	{
-		vm_log_info(
-				"version=%d.%d.%d", (appVersion >> 8) & 0xFF, (appVersion >> 16) & 0xFF, (appVersion >> 24) & 0xFF);
-	}
-	// Get required buffer size for Application Name information.
-	if (VM_IS_SUCCEEDED(vm_tag_get_tag(NULL,
-					VM_TAG_ID_APP_NAME,
-					NULL,
-					&reqSize)))
-	{
-		appName = (VMWSTR) vm_calloc(reqSize);
-		if (appName)
-		{
-			if (VM_IS_SUCCEEDED(vm_tag_get_tag(NULL,
-							VM_TAG_ID_APP_NAME,
-							appName,
-							&reqSize)))
-			{
-				char *name = (char *) vm_calloc(reqSize + 1);
-				vm_chset_ucs2_to_ascii((VMSTR) name, reqSize, (VMWSTR) appName);
-				vm_log_info("application name is '%s'", name);
-				// free it when reserved
-				vm_free(name);
-				vm_free(appName);
-			}
-		}
-	}
-}
 
 void showBatteryStats()
 {
@@ -122,7 +80,7 @@ void showBatteryStats()
 	}
 }
 
-const bool getGPS()
+const bool sampleGPS()
 {
 	unsigned char *utc_date_time = 0;
 	bool status;
@@ -144,6 +102,9 @@ const bool getGPS()
 		vm_log_info("GPS altitude is %f", LGPS.get_altitude());
 		vm_log_info("GPS mode is %c", LGPS.get_mode());
 		vm_log_info("GPS mode2 is %c", LGPS.get_mode2());
+
+		// update will succeed, knowing that gps is valid
+		_rtc.updateFromGPS();
 	}
 	else
 	{
@@ -200,14 +161,12 @@ const int simStatus()
 	return g_info.rxlev;
 }
 
-void https_send_request();
-
 const bool createLocationMsg(const char *format, VMSTR message)
 {
 	bool result;
 	int rxl = simStatus();
 
-	if (result = getGPS())
+	if (result = sampleGPS())
 	{
 		sprintf(message,
 				(VMCSTR) format, // LGPS.get_status(),
@@ -220,6 +179,7 @@ const bool createLocationMsg(const char *format, VMSTR message)
 	return result;
 }
 
+void https_send_request();
 static void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	extern VMCHAR myUrl[1024];
@@ -294,16 +254,7 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 			if (_dataJournal.isValid())
 			{
 				myBlinker.change(LEDBlinker::blueGreen, 100, 200, 2);
-
-				// should really be using the system time, after it's set by the first gps retrieval
-				VMCHAR dateLine[19];
-				unsigned char *utc_date_time = LGPS.get_utc_date_time();
-				sprintf(dateLine,
-						(VMCSTR) "%02d-%02d-%02dT%02d:%02d:%02d ",
-						utc_date_time[0], utc_date_time[1], utc_date_time[2],
-						utc_date_time[3], utc_date_time[4], utc_date_time[5]);
-				VM_RESULT result = _dataJournal.write(dateLine, false);
-				result |= _dataJournal.write(locationStatus);
+				VM_RESULT result = _dataJournal.write(locationStatus);
 
 				if (result < 0)
 				{
@@ -419,11 +370,17 @@ networkReady(void *user_data)
 #include "NetworkBearer.h"
 NetworkBearer myBearer(networkReady, NULL);
 
+#include "AppInfo.h"
+AppInfo _applicationInfo;
+
 static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
 	myBlinker.start();
-	getAppInfo();
+
+	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
+			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
+
 #ifdef DO_HE_BITE
 	watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
 #endif
