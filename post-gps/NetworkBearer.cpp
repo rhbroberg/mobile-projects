@@ -23,7 +23,7 @@ void NetworkBearer::invokeCallback()
 void NetworkBearer::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event,
 		VMUINT data_account_id, void *user_data)
 {
-	vm_log_info("in bearer callback");
+	vm_log_info("in bearer callback for event %d", event);
 	NetworkBearer *This = (NetworkBearer *) user_data;
 
 	if (VM_BEARER_WOULDBLOCK == This->_bearerHandle)
