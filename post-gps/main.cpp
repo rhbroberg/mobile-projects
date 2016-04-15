@@ -55,6 +55,8 @@ showBatteryStats()
 	return charging;
 }
 
+
+// move simStatus into networkBearer; make it block on status before it starts
 #include "vmgsm_cell.h"
 #include "vmgsm_gprs.h"
 #include "vmgsm_sim.h"
@@ -139,9 +141,11 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	bool locationReady;
 
 	// set different blinky status lights here; differentiate between gps not online and gps not locked yet
-#ifdef DO_HE_BITE
-	vm_wdt_reset(watchdog);	// loop which checks accelerometer will need to take this task over
-#endif
+	if (watchdog)
+	{
+		vm_wdt_reset(watchdog);	// loop which checks accelerometer will need to take this task over; and when we sleep from accelerometer this needs to be stop()ed
+	}
+
 	if ((locationReady = _gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
 			locationStatus, simStatus())))
 	{
@@ -261,6 +265,7 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 				myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
 			}
 
+#define BREAKY
 #ifdef BREAKY
 			static int onoff = 1;
 			onoff = 1 - onoff;
@@ -273,6 +278,7 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 	}
 }
 
+// move into bearer class
 #include "vmdns.h"
 VM_DNS_HANDLE _dnsHandle; // scope into networkReady?
 
@@ -293,6 +299,7 @@ VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result, void *user_
     return VM_SUCCESS;
 }
 
+// move into bearer class
 void
 networkReady(void *user_data)
 {
@@ -374,6 +381,13 @@ static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 
 }
 
+static void backOn(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
+{
+	vm_timer_delete_non_precise(timer_id);
+	vm_log_info("turning power on to radio", true);
+	vm_gsm_switch_mode(true, gsmPowerCallback);
+}
+
 void handle_sysevt(VMINT message, VMINT param)
 {
 	vm_log_info("handle_sysevt received %d", message);
@@ -381,7 +395,7 @@ void handle_sysevt(VMINT message, VMINT param)
 	{
 //	case VM_EVENT_CREATE:
 	case VM_EVENT_PAINT:
-		vm_timer_create_non_precise(50, startMe, NULL);
+		vm_timer_create_non_precise(100, startMe, NULL);
 		break;
 
 	case VM_EVENT_CELL_INFO_CHANGE:

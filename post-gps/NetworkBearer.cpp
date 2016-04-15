@@ -69,13 +69,16 @@ const bool
 NetworkBearer::enable(const char *apn, const char *proxy,
 		const bool useProxy, const unsigned int proxyPort)
 {
+	// fix: should refuse to start until SIM card is present and active
 	if (_isEnabled)
 	{
 		return false;
 	}
-	setAPN(apn, proxy, useProxy, proxyPort);
+	VMINT status = setAPN(apn, proxy, useProxy, proxyPort);
+	vm_log_info("setAPN returns %d", status);
 	_bearerHandle = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, this,
 			NetworkBearer::bearerCallback, VM_BEARER_IPV4);
+	vm_log_info("bearer_open returns %d", _bearerHandle);
 
 	return true;
 }
