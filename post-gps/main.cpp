@@ -1,22 +1,3 @@
-/*
- This sample code is in public domain.
-
- This sample code is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- */
-
-/* 
- This sample connects to HTTP(no secure) to retrieve index.html from labs.mediatek.com and print to vm_log.
-
- It calls the API vm_https_register_context_and_callback() to register the callback functions,
- then set the channel by vm_https_set_channel(), after the channel is established,
- it will send out the request by vm_https_send_request() and read the response by
- vm_https_read_content().
-
- You can change the url by modify macro VMHTTPS_TEST_URL.
- Before run this example, please set the APN information first by modify macros.
- */
 #include "vmtype.h" 
 #include "vmboard.h"
 #include "vmsystem.h"
@@ -57,60 +38,21 @@ const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
 const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
 
 // maybe move this into a method in the gps class instead
-#include "RealTimeClock.h"
-RealTimeClock _rtc;
+#include "GPSHelper.h"
+GPSHelper _gps;
 
 #include "MQTTnative.h"
 MQTTnative *portal = NULL;
-void *photoHandle = NULL;
+void *locationTopic = NULL;
 
-void showBatteryStats()
+const bool
+showBatteryStats()
 {
 	int level = vm_pwr_get_battery_level();
 	VMBOOL charging = vm_pwr_is_charging();
 
 	vm_log_debug("battery level is %d, charging is %d\n", level, charging);
-	if (charging)
-	{
-		myBlinker.change(LEDBlinker::color(LEDBlinker::green), 300);
-	}
-	else
-	{
-		myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 100, 200, 3);
-	}
-}
-
-const bool sampleGPS()
-{
-	unsigned char *utc_date_time = 0;
-	bool status;
-
-	if (status = LGPS.check_online())
-	{
-		utc_date_time = LGPS.get_utc_date_time();
-		vm_log_info(
-				"GPS UTC:%02d-%02d-%02d %02d:%02d:%02d", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4], utc_date_time[5]);
-		vm_log_info("GPS status is %c", LGPS.get_status());
-		vm_log_info(
-				"GPS latitude is %c:%f", LGPS.get_ns(), LGPS.get_latitude());
-		vm_log_info(
-				"GPS longitude is %c:%f", LGPS.get_ew(), LGPS.get_longitude());
-		vm_log_info("GPS speed is %f", LGPS.get_speed());
-		vm_log_info("GPS course is %f", LGPS.get_course());
-		vm_log_info("GPS position fix is %c", LGPS.get_position_fix());
-		vm_log_info("GPS sate used is %d", LGPS.get_sate_used());
-		vm_log_info("GPS altitude is %f", LGPS.get_altitude());
-		vm_log_info("GPS mode is %c", LGPS.get_mode());
-		vm_log_info("GPS mode2 is %c", LGPS.get_mode2());
-
-		// update will succeed, knowing that gps is valid
-		_rtc.updateFromGPS();
-	}
-	else
-	{
-		vm_log_info("gps not online yet");
-	}
-	return status ? (LGPS.get_sate_used() > 0) : false; // ridiculous check, but this gps library doesn't let me query if data is valid
+	return charging;
 }
 
 #include "vmgsm_cell.h"
@@ -118,10 +60,9 @@ const bool sampleGPS()
 #include "vmgsm_sim.h"
 #include "vmgsm_sms.h"
 
-vm_gsm_cell_info_t g_info; /* cell information data */
-
 const int simStatus()
 {
+	vm_gsm_cell_info_t g_info; /* cell information data */
 	VM_GSM_SIM_STATUS status;
 	VMSTR imsi = NULL;
 	VMSTR imei = NULL;
@@ -161,33 +102,15 @@ const int simStatus()
 	return g_info.rxlev;
 }
 
-const bool createLocationMsg(const char *format, VMSTR message)
-{
-	bool result;
-	int rxl = simStatus();
-
-	if (result = sampleGPS())
-	{
-		sprintf(message,
-				(VMCSTR) format, // LGPS.get_status(),
-				(LGPS.get_ns() == 'S') ? "-" : "", LGPS.get_latitude(),
-				(LGPS.get_ew() == 'W') ? "-" : "", LGPS.get_longitude(),
-				LGPS.get_altitude(), LGPS.get_course(), LGPS.get_speed(),
-				LGPS.get_position_fix(), LGPS.get_sate_used(), rxl);
-	}
-
-	return result;
-}
-
 void https_send_request();
 static void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	extern VMCHAR myUrl[1024];
 	extern int firstSend;
 
-	createLocationMsg(
+	_gps.createLocationMsg(
 			"http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d",
-			myUrl);
+			myUrl, simStatus());
 	https_send_request();
 
 	if (firstSend)
@@ -202,8 +125,6 @@ static void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	}
 }
 
-unsigned int publishFailures = 0;
-
 #include "DataJournal.h"
 const char *journalName = "mylog.txt";
 DataJournal _dataJournal((VMCSTR) journalName);
@@ -213,6 +134,7 @@ VM_WDT_HANDLE watchdog;
 
 static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
+	static unsigned int publishFailures = 0;
 	static VMCHAR locationStatus[1024];
 	bool locationReady;
 
@@ -220,15 +142,15 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 #ifdef DO_HE_BITE
 	vm_wdt_reset(watchdog);	// loop which checks accelerometer will need to take this task over
 #endif
-	if ((locationReady = createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
-			locationStatus)))
+	if ((locationReady = _gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
+			locationStatus, simStatus())))
 	{
 		vm_log_info("data is ready to publish");
 
 		if (portal && portal->ready())
 		{
 			vm_log_info("portal is ready to send");
-			if (portal->publish(photoHandle, locationStatus))
+			if (portal->publish(locationTopic, locationStatus))
 			{
 				vm_log_info("publish succeeded");
 				myBlinker.change(LEDBlinker::green, 200);
@@ -283,7 +205,7 @@ static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	portal = new MQTTnative(hostIP, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
 	portal->setTimeout(15000);
 	portal->start();
-	photoHandle = portal->topicHandle("location");
+	locationTopic = portal->topicHandle("location");
 
 	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
 }
@@ -297,9 +219,16 @@ static void ledtest(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	myBlinker.change(LEDBlinker::blue, 100, 500, 10);
 }
 
+void
+gsmPowerCallback(VMBOOL success)
+{
+	vm_log_info("power switch success is %d", success);
+}
+
 #include "vmdcl_kbd.h"
 #include "vmchset.h"
 #include "vmkeypad.h"
+#include "vmgsm.h"
 
 VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 {
@@ -322,6 +251,23 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 		{
 			// up
 			vm_log_debug("key is released\n");
+
+			if (showBatteryStats())
+			{
+				myBlinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
+			}
+			else
+			{
+				myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
+			}
+
+#ifdef BREAKY
+			static int onoff = 1;
+			onoff = 1 - onoff;
+
+			vm_log_info("turning power to %d", onoff);
+			vm_gsm_switch_mode(onoff, gsmPowerCallback);
+#endif
 		}
 		return 0;
 	}
@@ -373,6 +319,8 @@ NetworkBearer myBearer(networkReady, NULL);
 #include "AppInfo.h"
 AppInfo _applicationInfo;
 
+#include "vmbt_cm.h"
+
 static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
@@ -380,6 +328,19 @@ static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 
 	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
 			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
+
+	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());
+	vm_bt_cm_switch_off();
+	vm_log_info("bluetooth power status after switching off :%d", vm_bt_cm_get_power_status());
+
+	if (showBatteryStats())
+	{
+		myBlinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
+	}
+	else
+	{
+		myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
+	}
 
 #ifdef DO_HE_BITE
 	watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
@@ -402,10 +363,15 @@ static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 		vm_log_info("open of data journal '%s' failed: %d", journalName, openStatus);
 	}
 
-	vm_timer_create_non_precise(1000, logit, NULL);
+	if (_dataJournal.isValid())
+	{
+		// less useful if started without GPS lock, due to timestamp being bogus
+		VM_RESULT result = _dataJournal.write((VMCSTR) "starting up");
+	}
+
+	vm_timer_create_non_precise(4000, logit, NULL);
 #endif
 
-	// showBatteryStats(); overwrites led status, need to move elsewhere
 }
 
 void handle_sysevt(VMINT message, VMINT param)
@@ -427,6 +393,8 @@ void handle_sysevt(VMINT message, VMINT param)
 
 	case VM_EVENT_LOW_BATTERY:
 		// battery low!
+		vm_log_info("battery level critical");
+		(void) _dataJournal.write((VMCSTR) "battery level critical");
 		myBlinker.change(LEDBlinker::red, 100, 100, 20, true);
 		break;
 
