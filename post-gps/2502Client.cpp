@@ -17,6 +17,7 @@ my2502Client::connect(IPAddress ip, uint16_t port)
     return connect(addressString, port);
   }
 
+  // perhaps use vm_tcp_connect() instead, and avoid the bearer callback and dns calback, it's all bound into 1
   int
   my2502Client::connect(const char *host, uint16_t port)
   {

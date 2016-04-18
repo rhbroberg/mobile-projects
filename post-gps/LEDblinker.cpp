@@ -1,32 +1,31 @@
 #include "LEDBlinker.h"
+#include <functional>
 #include "vmsystem.h"
 #include "vmtimer.h"
 #include "vmdcl.h"
 #include "vmdcl_gpio.h"
+#include "ObjectCallbacks.h"
 
-// static
-VMINT32 LEDBlinker::ledGo(VM_THREAD_HANDLE thread_handle, void* user_data)
-{
-	((LEDBlinker *) user_data)->go();
-}
-
-// static
-void LEDBlinker::postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
+void LEDBlinker::postMySignal(VM_TIMER_ID_NON_PRECISE tid)
 {
 	vm_log_info("timer %d went off, posting signal", tid);
 	// if we attempt to delete a timer before it goes off the first time, the deletion fails - clearly a library defect
 	// next time it goes off here, update the timer id state and allow it to go away
-	((LEDBlinker *) user_data)->deleteTimer(tid);
-
-	((LEDBlinker *) user_data)->wakeup();
+	deleteTimer(tid);
+	wakeup();
 }
 
 LEDBlinker::LEDBlinker(const unsigned short redPin,
-		const unsigned short greenPin, const unsigned short bluePin) :
-		_currentColor(green), _onDuration(3000), _offDuration(3000), _currentRepeat(
-				1024), _redPin(redPin), _greenPin(greenPin), _bluePin(bluePin), _running(
+		const unsigned short greenPin, const unsigned short bluePin)
+: _currentColor(green), _onDuration(3000), _offDuration(3000), _currentRepeat(
+		1024), _redPin(redPin), _greenPin(greenPin), _bluePin(bluePin), _running(
 				false), _onoff(0), _noPreempt(false)
 {
+	// initialize function pointers to faciliate callbacks calling object methods directly
+	// these objects must have permanence beyond the stack frame where they are bound, so they are member data
+	_postMySignalPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { postMySignal(tid); };
+	_goPtr = [&] (void) { return go(); };
+
 	_signal = vm_signal_create();
 	vm_mutex_init(&_colorLock);
 
@@ -117,7 +116,8 @@ void LEDBlinker::start()
 	if (!_running)
 	{
 		vm_log_info("leds starting");
-		_thread = vm_thread_create(ledGo, this, 126);
+
+		_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_goPtr, 126);
 		wakeup();
 	}
 	else
@@ -151,7 +151,7 @@ void LEDBlinker::deleteTimer(VM_TIMER_ID_NON_PRECISE thisTimer)
 	}
 }
 
-void LEDBlinker::go()
+VMINT32 LEDBlinker::go()
 {
 	_running = true;
 
@@ -168,8 +168,7 @@ void LEDBlinker::go()
 			if (_onoff)
 			{
 				updateLeds((unsigned short) _currentColor);
-				_timer = vm_timer_create_non_precise(_onDuration, postMySignal,
-						this);
+				_timer = vm_timer_create_non_precise(_onDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
 				vm_log_info("turned led on; setting timer %d for %d ms", _timer, _onDuration);
 			}
 			else
@@ -177,8 +176,7 @@ void LEDBlinker::go()
 				updateLeds((unsigned short) black);
 				if (--_currentRepeat)
 				{
-					_timer = vm_timer_create_non_precise(_offDuration,
-							postMySignal, this);
+					_timer = vm_timer_create_non_precise(_offDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
 					vm_log_info("turned led off; setting timer %d for %d ms", _timer, _offDuration);
 				}
 				else

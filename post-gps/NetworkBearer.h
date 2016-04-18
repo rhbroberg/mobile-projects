@@ -2,28 +2,36 @@
 #define NetworkBearer_h
 
 #include "vmbearer.h"
-
-typedef void (*NetworkReadyCallback)(void* user_data);
+#include <functional>
+#include "vmdns.h"
 
 class NetworkBearer
 {
 public:
-	NetworkBearer(NetworkReadyCallback, void *callbackData);
-	const bool enable(const char *apn, const char *proxy,
+	NetworkBearer();
+
+	const bool enable(std::function<void (void)>callback, const char *apn, const char *proxy,
 			const bool useProxy, const unsigned int proxyPort);
 	const VM_RESULT disable();
-	void invokeCallback();
-
-	static VM_BEARER_HANDLE _bearerHandle;
+	void resolveHost(VMSTR host, std::function<void (char *)> callback);
 
 protected:
-	static void bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event,
-			VMUINT data_account_id, void *user_data);
+	VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result);
+	void bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event,
+			VMUINT data_account_id);
 
 	VMINT setAPN(const char *apn, const char *proxy,
 			const bool useProxy, const unsigned int proxyPort);
 
-	NetworkReadyCallback _readyCallback;
+	std::function<void (void)> _enabledCallback;
+	std::function<void (VM_BEARER_HANDLE handle, VM_BEARER_STATE event,VMUINT data_account_id)> _bearerCallbackPtr;
+	std::function<VM_RESULT (VM_DNS_HANDLE handle, vm_dns_result_t *result)> _dnsCallbackPtr;
+	std::function<void (char *)> _resolveCallbackPtr;
+
+	char _hostIP[16];
+	VM_DNS_HANDLE _dnsHandle;
+	vm_dns_result_t result;
+	VM_BEARER_HANDLE _bearerHandle;
 	void *_callbackData;
 	bool _isEnabled;
 };

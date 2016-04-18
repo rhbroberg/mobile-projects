@@ -42,7 +42,7 @@ const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
 GPSHelper _gps;
 
 #include "MQTTnative.h"
-MQTTnative *portal = NULL;
+MQTTnative *_portal = NULL;
 void *locationTopic = NULL;
 
 const bool
@@ -68,6 +68,8 @@ const int simStatus()
 	VM_GSM_SIM_STATUS status;
 	VMSTR imsi = NULL;
 	VMSTR imei = NULL;
+
+	// fix: retrieve iccid
 
 	/* Opens the cell when receiving AT command: AT+[1000]Test01 */
 	VMINT result = vm_gsm_cell_open();
@@ -132,18 +134,30 @@ const char *journalName = "mylog.txt";
 DataJournal _dataJournal((VMCSTR) journalName);
 
 #include "vmwdt.h"
-VM_WDT_HANDLE watchdog;
+VM_WDT_HANDLE _watchdog;
 
+// needs _portal, _journal, _blinker
 static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	static unsigned int publishFailures = 0;
 	static VMCHAR locationStatus[1024];
 	bool locationReady;
 
-	// set different blinky status lights here; differentiate between gps not online and gps not locked yet
-	if (watchdog)
+#ifdef FIRE_BAD
 	{
-		vm_wdt_reset(watchdog);	// loop which checks accelerometer will need to take this task over; and when we sleep from accelerometer this needs to be stop()ed
+		int level = analogRead(0);
+		if (level < 840)
+		{
+			level = 840;
+		}
+		int percentLevel =  (level - 840) * 100 / (1023 - 840);
+		vm_log_info("specific battery level: %d", percentLevel);
+	}
+#endif
+	// set different blinky status lights here; differentiate between gps not online and gps not locked yet
+	if (_watchdog)
+	{
+		vm_wdt_reset(_watchdog);	// loop which checks accelerometer will need to take this task over; and when we sleep from accelerometer this needs to be stop()ed
 	}
 
 	if ((locationReady = _gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
@@ -151,10 +165,10 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	{
 		vm_log_info("data is ready to publish");
 
-		if (portal && portal->ready())
+		if (_portal && _portal->ready())
 		{
 			vm_log_info("portal is ready to send");
-			if (portal->publish(locationTopic, locationStatus))
+			if (_portal->publish(locationTopic, locationStatus))
 			{
 				vm_log_info("publish succeeded");
 				myBlinker.change(LEDBlinker::green, 200);
@@ -167,8 +181,8 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 				if (publishFailures++ > 3)
 				{
 					vm_log_info("bouncing mqtt connection");
-					portal->disconnect();
-					portal->connect();
+					_portal->disconnect();
+					_portal->connect();
 					publishFailures = 0;
 					// next, count connect failures, and bounce the bearer if it fails, or restart
 				}
@@ -199,17 +213,16 @@ static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	}
 }
 
-char hostIP[16] = {0};
-
 static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
+	char *host = (char *)user_data;
 	vm_timer_delete_non_precise(timer_id);
-	vm_log_debug("using native adafruit connection");
+	vm_log_debug("using native adafruit connection to connect to %s", host);
 
-	portal = new MQTTnative(hostIP, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
-	portal->setTimeout(15000);
-	portal->start();
-	locationTopic = portal->topicHandle("location");
+	_portal = new MQTTnative(host, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
+	_portal->setTimeout(15000);
+	_portal->start();
+	locationTopic = _portal->topicHandle("location");
 
 	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
 }
@@ -278,50 +291,8 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 	}
 }
 
-// move into bearer class
-#include "vmdns.h"
-VM_DNS_HANDLE _dnsHandle; // scope into networkReady?
-
-// move into bearer class?
-// 	static VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result, void *user_data);
-// static
-VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result, void *user_data)
-{
-    sprintf((VMSTR)hostIP, (VMCSTR)"%d.%d.%d.%d", (result->address[0]) & 0xFF, ((result->address[0]) & 0xFF00)>>8, ((result->address[0]) & 0xFF0000)>>16,
-        ((result->address[0]) & 0xFF000000)>>24);
-
-	vm_log_info("dnsCallback complete: %s", hostIP);
-
-    // now start mqtt with resolved name
-	vm_timer_create_non_precise(100, mqttInit, NULL);
-
-	// return VM_FAILURE if all zeros?
-    return VM_SUCCESS;
-}
-
-// move into bearer class
-void
-networkReady(void *user_data)
-{
-	vm_log_info("network is ready in main");
-	static vm_dns_result_t result;  // must persist beyond scope of this function, thus it is static
-
-	// move the bearer stuff into the main event handler, call mqttinit when bearer complete.  what happens if it fails?
-	// only if _host doesn't look like a dotted quad
-	if (1 /* doesn't look like a dotted quad */)
-	{
-		vm_log_info("requesting host resolution for %s", AIO_SERVER);
-
-		_dnsHandle = vm_dns_get_host_by_name(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, (VMSTR) AIO_SERVER, &result, dnsCallback, NULL);
-	}
-	else
-	{
-		vm_timer_create_non_precise(100, mqttInit, NULL);
-	}
-}
-
 #include "NetworkBearer.h"
-NetworkBearer myBearer(networkReady, NULL);
+NetworkBearer myBearer;
 
 #include "AppInfo.h"
 AppInfo _applicationInfo;
@@ -350,9 +321,9 @@ static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	}
 
 #ifdef DO_HE_BITE
-	watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
+	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
 #endif
-    vm_log_info("watchdog id is %d", watchdog);
+    vm_log_info("watchdog id is %d", _watchdog);
 
 //#define USE_HTTP
 #ifdef USE_HTTP
@@ -361,7 +332,10 @@ static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	vm_timer_create_non_precise(60000, myHttpSend, NULL);
 
 #else
-	myBearer.enable(APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+	static std::function<void (char *host)> _resolvedPtr = [&] (char *host) { vm_timer_create_non_precise(100, mqttInit, host); };
+	static std::function<void (void)> _networkReadyPtr = [&] (void) { myBearer.resolveHost((VMSTR) AIO_SERVER, _resolvedPtr); };
+
+	myBearer.enable(_networkReadyPtr, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
 
 	VM_RESULT openStatus;
 	// fix: make sure to set time from gps before opening the log, otherwise rotation won't work
@@ -379,13 +353,6 @@ static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	vm_timer_create_non_precise(4000, logit, NULL);
 #endif
 
-}
-
-static void backOn(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
-{
-	vm_timer_delete_non_precise(timer_id);
-	vm_log_info("turning power on to radio", true);
-	vm_gsm_switch_mode(true, gsmPowerCallback);
 }
 
 void handle_sysevt(VMINT message, VMINT param)
