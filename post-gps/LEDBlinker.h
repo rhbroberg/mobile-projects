@@ -9,7 +9,7 @@
 #include "vmdcl.h"
 #include "vmdcl_gpio.h"
 #include "vmtimer.h"
-#include <functional>
+//#include <functional>
 
 class LEDBlinker
 {
@@ -41,8 +41,14 @@ public:
 protected:
 	void updateLeds(const unsigned short);
 
+#ifdef NOMO
 	std::function<VMINT32 (void)> _goPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE tid)> _postMySignalPtr;
+#else
+	static VMINT32 ledGo(VM_THREAD_HANDLE thread_handle, void* user_data);
+	static void postMySignal(VM_TIMER_ID_NON_PRECISE tid, void* user_data);
+#endif
+
 	VMBOOL _running, _noPreempt;
 	int _onoff;
 	color _currentColor;
@@ -57,7 +63,9 @@ protected:
 	VM_SIGNAL_ID _signal;
 	vm_mutex_t _colorLock;
 
+#ifdef NOMO
 	void postMySignal(VM_TIMER_ID_NON_PRECISE tid);
+#endif
 
 };
 

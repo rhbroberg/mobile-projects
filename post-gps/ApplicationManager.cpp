@@ -5,7 +5,10 @@
 #include "vmtimer.h"
 #include "vmgsm_gprs.h"
 #include "vmpwr.h"
+
+#ifdef NOMO
 #include "ObjectCallbacks.h"
+#endif
 
 #include "LGPS.h"
 #include "LEDBlinker.h"
@@ -20,6 +23,39 @@ extern VM_WDT_HANDLE _watchdog;
 #include "vmhttps.h"
 void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data);
 
+// static
+void
+resolveHostWrapper(char *host, void *user_data)
+{
+	((ApplicationManager *)user_data)->hostResolved(host);
+}
+
+// static
+void
+networkReadyWrapper(void *user_data)
+{
+	((ApplicationManager*) user_data)->networkReady();
+}
+
+void
+ApplicationManager::hostResolved(char *host)
+{
+	_hostIP = host;
+	mqttInit();
+}
+
+void
+ApplicationManager::networkReady()
+{
+	_network.resolveHost((VMSTR) AIO_SERVER,  resolveHostWrapper, this);
+}
+
+VMINT32
+logitWrapper(VM_THREAD_HANDLE handle, void *user_data)
+{
+	return ((ApplicationManager *)user_data)->go();
+}
+
 // needs _watchdog, _portal, _blinker
 ApplicationManager::ApplicationManager()
   : _publishFailures(0)
@@ -30,6 +66,7 @@ ApplicationManager::ApplicationManager()
   , _hostIP(NULL)
   , _networkIsReady(false)
 {
+#ifdef NOMO
 //	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
 	_logitPtr = [&] (void) { return go(); };
 
@@ -37,6 +74,10 @@ ApplicationManager::ApplicationManager()
 //	_resolvedPtr = [&] (char *host) { _hostIP = host; vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_mqttConnectPtr); };
 	_resolvedPtr = [&] (char *host) { _hostIP = host; mqttInit(); };
 	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) AIO_SERVER, _resolvedPtr); };
+#else
+
+
+#endif
 }
 
 void
@@ -119,6 +160,9 @@ ApplicationManager::logit()
 VMINT32
 ApplicationManager::go()
 {
+	_network.enable(networkReadyWrapper, this, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+
+	vm_log_debug("go go gadget arms");
 	while (true)
 	{
 		vm_thread_sleep(4000);
@@ -166,7 +210,7 @@ ApplicationManager::start()
 	vm_timer_create_non_precise(60000, myHttpSend, NULL);
 
 #else
-	_network.enable(_networkReadyPtr, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+//	_network.enable(networkReadyWrapper, this, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
 #endif
 
 	VM_RESULT openStatus;
@@ -182,7 +226,7 @@ ApplicationManager::start()
 		VM_RESULT result = _dataJournal.write((VMCSTR) "starting up");
 	}
 
-	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
+	_thread = vm_thread_create(logitWrapper, this, 127);
 //	vm_timer_create_non_precise(4000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
 
 }

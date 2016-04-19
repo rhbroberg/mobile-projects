@@ -3,7 +3,9 @@
 #include "vmsystem.h"
 #include "vmgsm_gprs.h"
 #include "vmlog.h"
+#ifdef NOMO
 #include "ObjectCallbacks.h"
+#endif
 #include "vmstdlib.h"
 
 #include "vmgsm_cell.h"
@@ -11,11 +13,31 @@
 #include "vmgsm_sim.h"
 #include "vmgsm_sms.h"
 
+//static
+void
+bearerCallbackWrapper(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id, void *user_data)
+{
+	((GSMNetwork *)user_data)->bearerCallback(handle, event, data_account_id);
+}
+
+//static
+VM_RESULT
+dnsCallbackWrapper(VM_DNS_HANDLE handle, vm_dns_result_t *result, void *user_data)
+{
+	return ((GSMNetwork *)user_data)->dnsCallback(handle, result);
+}
+
 GSMNetwork::GSMNetwork()
   : _isEnabled(false)
+  , _enabledUserData(NULL)
+  , _enabledCallbackPtr(NULL)
+  , _resolveCallbackData(NULL)
+  , _resolveCallbackPtr(NULL)
 {
+#ifdef NOMO
 	_bearerCallbackPtr = [&] (VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id) { bearerCallback(handle, event, data_account_id); };
 	_dnsCallbackPtr = [&] (VM_DNS_HANDLE handle, vm_dns_result_t *result) { return dnsCallback(handle, result); };
+#endif
 }
 
 void GSMNetwork::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id)
@@ -36,10 +58,12 @@ void GSMNetwork::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, 
 			break;
 		case VM_BEARER_ACTIVATED:
 		{
+#ifdef MIGHT_BREAK
 			VM_RESULT ret = vm_gsm_gprs_hold_bearer(VM_GSM_GPRS_HANDLE_TYPE_TCP, handle);
 			vm_log_info("bearer is activated, hold = %d", ret);
+#endif
 			_isEnabled = true;
-			_enabledCallback();
+			(*_enabledCallbackPtr)(_enabledUserData);
 			break;
 		}
 		case VM_BEARER_DEACTIVATING:
@@ -66,8 +90,9 @@ VMINT GSMNetwork::setAPN(const char *apn, const char *proxy,
 	return ret;
 }
 
+
 const bool
-GSMNetwork::enable(std::function<void (void)> callback, const char *apn, const char *proxy,
+GSMNetwork::enable(void (*readyCallback)(void *), void *user_data, const char *apn, const char *proxy,
 		const bool useProxy, const unsigned int proxyPort)
 {
 	// fix: should refuse to start until SIM card is present and active
@@ -75,11 +100,16 @@ GSMNetwork::enable(std::function<void (void)> callback, const char *apn, const c
 	{
 		return false;
 	}
-	_enabledCallback = callback;
+	_enabledCallbackPtr = readyCallback;
+	_enabledUserData = user_data;
 	VMINT status = setAPN(apn, proxy, useProxy, proxyPort);
 	vm_log_info("setAPN returns %d", status);
+#ifdef NOMO
 	_bearerHandle = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, &_bearerCallbackPtr,
 			ObjectCallbacks::bearerOpen, VM_BEARER_IPV4);
+#else
+	_bearerHandle = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, this, bearerCallbackWrapper, VM_BEARER_IPV4);
+#endif
 	vm_log_info("bearer_open returns %d", _bearerHandle);
 
 	return true;
@@ -99,17 +129,18 @@ VM_RESULT GSMNetwork::dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result)
 	vm_log_info("dnsCallback complete: %s", _hostIP);
 
     // now start mqtt with resolved name
-	_resolveCallbackPtr(_hostIP);
+	(*_resolveCallbackPtr)((char *)_hostIP, _resolveCallbackData);
 
 	// return VM_FAILURE if all zeros?
     return VM_SUCCESS;
 }
 
 void
-GSMNetwork::resolveHost(VMSTR host, std::function<void (char *)> callback)
+GSMNetwork::resolveHost(VMSTR host, void (*callback)(char *, void *), void *user_data)
 {
 	vm_log_info("resolveHost looking at %s", host);
 	_resolveCallbackPtr = callback;
+	_resolveCallbackData = user_data;
 
 	// fix: check if _isEnabled first...
 
@@ -119,12 +150,16 @@ GSMNetwork::resolveHost(VMSTR host, std::function<void (char *)> callback)
 	{
 		vm_log_info("requesting host resolution for %s", host);
 
+#ifdef NOMO
 		_dnsHandle = vm_dns_get_host_by_name(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, host, &result, ObjectCallbacks::dnsLookup, &_dnsCallbackPtr);
+#else
+		_dnsHandle = vm_dns_get_host_by_name(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, host, &result, dnsCallbackWrapper, this);
+#endif
 	}
 	else
 	{
 		vm_log_info("host %s already looks like a dotted quad, no need to resolve", host);
-		_resolveCallbackPtr((char *)host);
+		(*_resolveCallbackPtr)((char *)host, _resolveCallbackData);
 	}
 }
 
