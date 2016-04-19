@@ -14,7 +14,7 @@ GPSHelper::updateRTC()
 {
 	if (!_isSet)
 	{
-		if (LGPS.check_online())
+		if (LGPS.check_online() && (LGPS.get_position_fix() != '0'))
 		{
 			const unsigned char *utc_date_time = LGPS.get_utc_date_time();
 			vm_date_time_t t;
@@ -83,7 +83,6 @@ GPSHelper::sample()
 		vm_log_info("GPS mode is %c", LGPS.get_mode());
 		vm_log_info("GPS mode2 is %c", LGPS.get_mode2());
 
-		// update will succeed, knowing that gps is valid
 		updateRTC();
 	}
 	else

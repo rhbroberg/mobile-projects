@@ -10,40 +10,28 @@
 
 #include "ResID.h"
 #include "main.h"
-#include "vmhttps.h"
 #include "vmtimer.h"
 #include "vmgsm_gprs.h"
-
 #include "vmpwr.h"
-#include "LGPS.h"
+
+// key handling
+#include "vmdcl_kbd.h"
+#include "vmchset.h"
+#include "vmkeypad.h"
+#include "vmgsm.h"
+
+#include "vmbt_cm.h"
+#include "AppInfo.h"
+AppInfo _applicationInfo;
+
+#include "ApplicationManager.h"
+ApplicationManager appmgr;
+
 #include "LEDBlinker.h"
-#include "LBattery.h"
 LEDBlinker myBlinker;
 
-#define APN "wholesale"
-#define USING_PROXY VM_FALSE
-#define PROXY_IP    "0.0.0.0"
-#define PROXY_PORT  80
-
-#define AIO_SERVER      "io.adafruit.com"
-//#define AIO_SERVER              "52.5.238.97"
-#define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define AIO_USERNAME    "rhbroberg"
-#define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
-
-// Store the MQTT server, username, and password in flash memory.
-// This is required for using the Adafruit MQTT library.
-const char MQTT_SERVER[] PROGMEM = AIO_SERVER;
-const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
-const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
-
-// maybe move this into a method in the gps class instead
-#include "GPSHelper.h"
-GPSHelper _gps;
-
-#include "MQTTnative.h"
-MQTTnative *_portal = NULL;
-void *locationTopic = NULL;
+#include "vmwdt.h"
+VM_WDT_HANDLE _watchdog;
 
 const bool
 showBatteryStats()
@@ -55,183 +43,11 @@ showBatteryStats()
 	return charging;
 }
 
-
-// move simStatus into networkBearer; make it block on status before it starts
-#include "vmgsm_cell.h"
-#include "vmgsm_gprs.h"
-#include "vmgsm_sim.h"
-#include "vmgsm_sms.h"
-
-const int simStatus()
-{
-	vm_gsm_cell_info_t g_info; /* cell information data */
-	VM_GSM_SIM_STATUS status;
-	VMSTR imsi = NULL;
-	VMSTR imei = NULL;
-
-	// fix: retrieve iccid
-
-	/* Opens the cell when receiving AT command: AT+[1000]Test01 */
-	VMINT result = vm_gsm_cell_open();
-	vm_log_info("open result = %d", result);
-	VMBOOL has = vm_gsm_sim_has_card();
-	VM_GSM_SIM_ID id = vm_gsm_sim_get_active_sim_card();
-	imsi = (VMSTR) vm_gsm_sim_get_imsi(id);
-	imei = (VMSTR) vm_gsm_sim_get_imei(id);
-	status = vm_gsm_sim_get_card_status(id);
-	VMBOOL smsReady = vm_gsm_sms_is_sms_ready();
-	vm_log_info("active sim id = %d, sms is ready %d\n", id, smsReady);
-
-	vm_gsm_cell_get_current_cell_info(&g_info);
-	vm_log_info(
-			"ar=%d, bsic=%d, rxlev=%d, mcc=%d, mnc=%d, lac=%d, ci=%d", g_info.arfcn, g_info.bsic, g_info.rxlev, g_info.mcc, g_info.mnc, g_info.lac, g_info.ci);
-
-	if ((has == VM_TRUE) || true)
-	{
-		if (imsi != NULL)
-		{
-			vm_log_info("sim imsi = %s", (char*)imsi);
-			vm_log_info("imei = %s", (char*)imei);
-			vm_log_info("sim status = %d", (char*)status);
-		}
-		else
-		{
-			vm_log_info("query sim imsi fail\n");
-		}
-	}
-	else
-	{
-		vm_log_info("no sim \n");
-	}
-	return g_info.rxlev;
-}
-
-void https_send_request();
-static void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
-{
-	extern VMCHAR myUrl[1024];
-	extern int firstSend;
-
-	_gps.createLocationMsg(
-			"http://io.adafruit.com/api/groups/tracker/send.none?x-aio-key=b8929d313c50fe513da199b960043b344e2b3f1f&&lat=%s%f&long=%s%f&alt=%f&course=%f&speed=%f&fix=%c&satellites=%d&rxl=%d",
-			myUrl, simStatus());
-	https_send_request();
-
-	if (firstSend)
-	{
-		vm_timer_delete_non_precise(timer_id);
-		vm_timer_create_non_precise(45000, myHttpSend, NULL);
-	}
-	else
-	{
-		vm_timer_delete_non_precise(timer_id);
-		vm_timer_create_non_precise(10000, myHttpSend, NULL);
-	}
-}
-
-#include "DataJournal.h"
-const char *journalName = "mylog.txt";
-DataJournal _dataJournal((VMCSTR) journalName);
-
-#include "vmwdt.h"
-VM_WDT_HANDLE _watchdog;
-
-// needs _portal, _journal, _blinker
-static void logit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
-{
-	static unsigned int publishFailures = 0;
-	static VMCHAR locationStatus[1024];
-	bool locationReady;
-
-#ifdef FIRE_BAD
-	{
-		int level = analogRead(0);
-		if (level < 840)
-		{
-			level = 840;
-		}
-		int percentLevel =  (level - 840) * 100 / (1023 - 840);
-		vm_log_info("specific battery level: %d", percentLevel);
-	}
-#endif
-	// set different blinky status lights here; differentiate between gps not online and gps not locked yet
-	if (_watchdog)
-	{
-		vm_wdt_reset(_watchdog);	// loop which checks accelerometer will need to take this task over; and when we sleep from accelerometer this needs to be stop()ed
-	}
-
-	if ((locationReady = _gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
-			locationStatus, simStatus())))
-	{
-		vm_log_info("data is ready to publish");
-
-		if (_portal && _portal->ready())
-		{
-			vm_log_info("portal is ready to send");
-			if (_portal->publish(locationTopic, locationStatus))
-			{
-				vm_log_info("publish succeeded");
-				myBlinker.change(LEDBlinker::green, 200);
-			}
-			else
-			{
-				vm_log_info("publish failed");
-				myBlinker.change(LEDBlinker::red, 100, 150, 1);
-
-				if (publishFailures++ > 3)
-				{
-					vm_log_info("bouncing mqtt connection");
-					_portal->disconnect();
-					_portal->connect();
-					publishFailures = 0;
-					// next, count connect failures, and bounce the bearer if it fails, or restart
-				}
-			}
-		}
-		else
-		{
-			vm_log_info("portal not ready yet; archiving data");
-			if (_dataJournal.isValid())
-			{
-				myBlinker.change(LEDBlinker::blueGreen, 100, 200, 2);
-				VM_RESULT result = _dataJournal.write(locationStatus);
-
-				if (result < 0)
-				{
-					vm_log_info("woe: cannot write to logfile: %d", result);
-				}
-			}
-			else
-			{
-				myBlinker.change(LEDBlinker::red, 100, 200, 2);
-			}
-		}
-	}
-	else
-	{
-		myBlinker.change(LEDBlinker::red, 100, 150, 3);
-	}
-}
-
-static void mqttInit(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
-{
-	char *host = (char *)user_data;
-	vm_timer_delete_non_precise(timer_id);
-	vm_log_debug("using native adafruit connection to connect to %s", host);
-
-	_portal = new MQTTnative(host, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
-	_portal->setTimeout(15000);
-	_portal->start();
-	locationTopic = _portal->topicHandle("location");
-
-	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
-}
-
-static void ledtest(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
+void ledtest(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_log_debug("ledtest");
 	myBlinker.change(LEDBlinker::green, 300, 300, 10);
-	delay(10000);
+	// delay(10000);
 	vm_log_debug("another test");
 	myBlinker.change(LEDBlinker::blue, 100, 500, 10);
 }
@@ -241,11 +57,6 @@ gsmPowerCallback(VMBOOL success)
 {
 	vm_log_info("power switch success is %d", success);
 }
-
-#include "vmdcl_kbd.h"
-#include "vmchset.h"
-#include "vmkeypad.h"
-#include "vmgsm.h"
 
 VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 {
@@ -278,28 +89,17 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 				myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
 			}
 
-#define BREAKY
-#ifdef BREAKY
 			static int onoff = 1;
 			onoff = 1 - onoff;
 
 			vm_log_info("turning power to %d", onoff);
 			vm_gsm_switch_mode(onoff, gsmPowerCallback);
-#endif
 		}
 		return 0;
 	}
 }
 
-#include "NetworkBearer.h"
-NetworkBearer myBearer;
-
-#include "AppInfo.h"
-AppInfo _applicationInfo;
-
-#include "vmbt_cm.h"
-
-static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
+void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
 	myBlinker.start();
@@ -320,41 +120,28 @@ static void startMe(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 		myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
 	}
 
+#define DO_HE_BITE
 #ifdef DO_HE_BITE
 	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
 #endif
-    vm_log_info("watchdog id is %d", _watchdog);
-
-//#define USE_HTTP
-#ifdef USE_HTTP
-	myBlinker.change(LEDBlinker::white, 3000, 3000, 1024);
-	//	  vm_timer_create_non_precise(60000, ledtest, NULL);
-	vm_timer_create_non_precise(60000, myHttpSend, NULL);
-
-#else
-	static std::function<void (char *host)> _resolvedPtr = [&] (char *host) { vm_timer_create_non_precise(100, mqttInit, host); };
-	static std::function<void (void)> _networkReadyPtr = [&] (void) { myBearer.resolveHost((VMSTR) AIO_SERVER, _resolvedPtr); };
-
-	myBearer.enable(_networkReadyPtr, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
-
-	VM_RESULT openStatus;
-	// fix: make sure to set time from gps before opening the log, otherwise rotation won't work
-	if (openStatus = _dataJournal.open() < 0)
+	// maybe this has to go in the non-main thread?
+#ifdef FIRE_BAD
 	{
-		vm_log_info("open of data journal '%s' failed: %d", journalName, openStatus);
+		int level = analogRead(0);
+		if (level < 840)
+		{
+			level = 840;
+		}
+		int percentLevel =  (level - 840) * 100 / (1023 - 840);
+		vm_log_info("specific battery level: %d", percentLevel);
 	}
-
-	if (_dataJournal.isValid())
-	{
-		// less useful if started without GPS lock, due to timestamp being bogus
-		VM_RESULT result = _dataJournal.write((VMCSTR) "starting up");
-	}
-
-	vm_timer_create_non_precise(4000, logit, NULL);
 #endif
+   vm_log_info("watchdog id is %d", _watchdog);
 
+    appmgr.start();
 }
 
+// events here should really iterate over registered listeners, using std::function objects or regular listener pattern
 void handle_sysevt(VMINT message, VMINT param)
 {
 	vm_log_info("handle_sysevt received %d", message);
@@ -362,20 +149,20 @@ void handle_sysevt(VMINT message, VMINT param)
 	{
 //	case VM_EVENT_CREATE:
 	case VM_EVENT_PAINT:
-		vm_timer_create_non_precise(100, startMe, NULL);
+		vm_timer_create_non_precise(100, initializeSystem, NULL);
 		break;
 
 	case VM_EVENT_CELL_INFO_CHANGE:
 		/* After opening the cell, this event will occur when the cell info changes.
 		 * The new data of the cell info can be obtained from here. */
-		myBlinker.change(LEDBlinker::blue, 750, 500, 3, true);
-		simStatus();
+		appmgr.cellChanged();
 		break;
 
 	case VM_EVENT_LOW_BATTERY:
 		// battery low!
 		vm_log_info("battery level critical");
-		(void) _dataJournal.write((VMCSTR) "battery level critical");
+		// this really needs to go into a separate special logfile
+		// (void) _dataJournal.write((VMCSTR) "battery level critical");
 		myBlinker.change(LEDBlinker::red, 100, 100, 20, true);
 		break;
 
@@ -393,4 +180,3 @@ void vm_main(void)
     vm_keypad_register_event_callback(handle_keypad_event);
 }
 }
-

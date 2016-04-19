@@ -1,19 +1,20 @@
-#ifndef NetworkBearer_h
-#define NetworkBearer_h
+#ifndef GSMNetwork_h
+#define GSMNetwork_h
 
 #include "vmbearer.h"
 #include <functional>
 #include "vmdns.h"
 
-class NetworkBearer
+class GSMNetwork
 {
 public:
-	NetworkBearer();
+	GSMNetwork();
 
 	const bool enable(std::function<void (void)>callback, const char *apn, const char *proxy,
 			const bool useProxy, const unsigned int proxyPort);
 	const VM_RESULT disable();
 	void resolveHost(VMSTR host, std::function<void (char *)> callback);
+	const int simStatus();
 
 protected:
 	VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result);
@@ -36,4 +37,4 @@ protected:
 	bool _isEnabled;
 };
 
-#endif // NetworkBearer_h
+#endif // GSMNetwork_h

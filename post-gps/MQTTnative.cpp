@@ -7,14 +7,15 @@
 #include "vmdcl_gpio.h"
 #include "vmthread.h"
 #include "vmres.h"
+#include "vmlog.h"
 
 #include "Client.h"
 #include "MQTTnative.h"
 
 MQTTnative::MQTTnative(const char *host, const char *username, const char *key,
-		const unsigned int port) :
-		_mqtt(&_client, host, port, username, key), _host(host), _username(
-				username), _key(key), _port(port), _timeout(10000) // 10 seconds
+		const unsigned int port)
+  : _mqtt(&_client, host, port, username, key), _host(host), _username(
+		 username), _key(key), _port(port), _timeout(10000) // 10 seconds
 {
 	vm_mutex_init(&_connectionLock);
 }
@@ -168,13 +169,13 @@ void MQTTnative::connect()
 		return;
 	}
 
-	Serial.print("Connecting to MQTT... ");
+	vm_log_info("Connecting to MQTT... ");
 
 	uint8_t retries = 90;
 	while ((ret = _mqtt.connect()) != 0)
 	{ // connect will return 0 for connected
-		Serial.println(_mqtt.connectErrorString(ret));
-		Serial.println("Retrying MQTT connection in 5 seconds...");
+		vm_log_info("error message is %s", (const prog_char *)_mqtt.connectErrorString(ret));
+		vm_log_info("Retrying MQTT connection in 5 seconds...");
 		_mqtt.disconnect();
 		delay(5000); // wait 5 seconds
 		retries--;
@@ -184,10 +185,10 @@ void MQTTnative::connect()
 			while (1)
 			{
 				// much more reasonable is to continue trying while data is logging
-				Serial.println("bummer");
+				vm_log_info("bummer");
 				delay(5000);
 			}
 		}
 	}
-	Serial.println("MQTT Connected!");
+	vm_log_info("MQTT Connected!");
 }

@@ -8,7 +8,7 @@
 
 void LEDBlinker::postMySignal(VM_TIMER_ID_NON_PRECISE tid)
 {
-	vm_log_info("timer %d went off, posting signal", tid);
+	//vm_log_info("timer %d went off, posting signal", tid);
 	// if we attempt to delete a timer before it goes off the first time, the deletion fails - clearly a library defect
 	// next time it goes off here, update the timer id state and allow it to go away
 	deleteTimer(tid);
@@ -135,7 +135,7 @@ void LEDBlinker::deleteTimer(VM_TIMER_ID_NON_PRECISE thisTimer)
 {
 	if (thisTimer > 0)
 	{
-		vm_log_info("deleting timer %d", thisTimer);
+		//vm_log_info("deleting timer %d", thisTimer);
 		VM_RESULT r = vm_timer_delete_non_precise(thisTimer);
 		if (r)
 		{
@@ -155,6 +155,7 @@ VMINT32 LEDBlinker::go()
 {
 	_running = true;
 
+	vm_log_info("rgb blinker online");
 	while (_running)
 	{
 		vm_signal_wait(_signal);
@@ -169,7 +170,7 @@ VMINT32 LEDBlinker::go()
 			{
 				updateLeds((unsigned short) _currentColor);
 				_timer = vm_timer_create_non_precise(_onDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
-				vm_log_info("turned led on; setting timer %d for %d ms", _timer, _onDuration);
+				//vm_log_info("turned led on; setting timer %d for %d ms", _timer, _onDuration);
 			}
 			else
 			{
@@ -177,7 +178,7 @@ VMINT32 LEDBlinker::go()
 				if (--_currentRepeat)
 				{
 					_timer = vm_timer_create_non_precise(_offDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
-					vm_log_info("turned led off; setting timer %d for %d ms", _timer, _offDuration);
+					//vm_log_info("turned led off; setting timer %d for %d ms", _timer, _offDuration);
 				}
 				else
 				{

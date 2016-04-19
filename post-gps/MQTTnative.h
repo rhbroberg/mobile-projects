@@ -1,7 +1,7 @@
 #ifndef _MQTTnative_h
 #define _MQTTnative_h
 
-#include "2502Client.h"
+#include "RephoneClient.h"
 #include "Adafruit_MQTT_Client.h"
 #include "vmthread.h"
 
@@ -34,7 +34,7 @@ protected:
 
 	unsigned int _timeout;
 	bool _isRunning;
-	my2502Client _client;
+	RephoneClient _client;
 	Adafruit_MQTT_Client _mqtt;
 
 };

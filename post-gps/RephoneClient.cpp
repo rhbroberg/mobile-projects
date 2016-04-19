@@ -1,14 +1,14 @@
-#include "2502Client.h"
+#include "RephoneClient.h"
 #include "vmlog.h"
 
-my2502Client::my2502Client()
+RephoneClient::RephoneClient()
   {
     _peer = 0;
     _connected = false;
   }
 
 int
-my2502Client::connect(IPAddress ip, uint16_t port)
+RephoneClient::connect(IPAddress ip, uint16_t port)
   {
     uint32_t address[4]; // = (uint32_t)ip;
     char addressString[16];
@@ -19,7 +19,7 @@ my2502Client::connect(IPAddress ip, uint16_t port)
 
   // perhaps use vm_tcp_connect() instead, and avoid the bearer callback and dns calback, it's all bound into 1
   int
-  my2502Client::connect(const char *host, uint16_t port)
+  RephoneClient::connect(const char *host, uint16_t port)
   {
     SOCKADDR_IN addr_in = {0};
     int len = 0;
@@ -44,6 +44,10 @@ my2502Client::connect(IPAddress ip, uint16_t port)
       {
         _connected = true;
       }
+    else
+    {
+    	// protect against NO_SOCKET_AVAILABLE; find a way to reset subsystem, or reset entire application
+    }
     vm_log_debug("connection status now %d, return code %d", _connected, ret);
 
 #ifdef CALL_FAILS
@@ -56,16 +60,16 @@ my2502Client::connect(IPAddress ip, uint16_t port)
   }
 
   size_t
-  my2502Client::write(uint8_t b)
+  RephoneClient::write(uint8_t b)
   {
-    //vm_log_debug("writing byte %d", b);
+    vm_log_debug("writing byte %d", b);
     return vm_soc_send(_peer, (const char *)&b, 1, 0);
   }
 
   size_t
-  my2502Client::write(const uint8_t *buf, size_t size)
+  RephoneClient::write(const uint8_t *buf, size_t size)
   {
-    //vm_log_debug("writing %d bytes", size);
+    vm_log_debug("writing %d bytes", size);
 #ifdef NOISY
     for (int i = 0; i < size; i+=10)
       {
@@ -76,7 +80,7 @@ my2502Client::connect(IPAddress ip, uint16_t port)
   }
 
   int
-  my2502Client::available()
+  RephoneClient::available()
   {
     // use select() here
     timeval timeout;
@@ -102,37 +106,37 @@ my2502Client::connect(IPAddress ip, uint16_t port)
   }
 
   int
-  my2502Client::read()
+  RephoneClient::read()
   {
     uint8_t b;
 
     int result = vm_soc_recv(_peer, (char *)&b, 1, 0);
-    //vm_log_debug("reading byte '%d' returned %d", b, result);
+    vm_log_debug("reading byte '%d' returned %d", b, result);
     return b;
   }
 
   int
-  my2502Client::read(uint8_t *buf, size_t size)
+  RephoneClient::read(uint8_t *buf, size_t size)
   {
     int result = vm_soc_recv(_peer, (char *)buf, size, 0);
-    //vm_log_debug("read %d bytes returned %d", size, result);
+    vm_log_debug("read %d bytes returned %d", size, result);
     return result;
   }
 
   int
-  my2502Client::peek()
+  RephoneClient::peek()
   {
     vm_log_debug("peeking at bytes");
     return 0;
   }
 
   void
-  my2502Client::flush()
+  RephoneClient::flush()
   {
   }
 
   void
-  my2502Client::stop()
+  RephoneClient::stop()
   {
     vm_log_debug("stopping connection on socket %d", _peer);
     vm_soc_close_socket(_peer);
@@ -140,7 +144,7 @@ my2502Client::connect(IPAddress ip, uint16_t port)
   }
 
   uint8_t
-  my2502Client::connected()
+  RephoneClient::connected()
   {
     return _connected;
   }
