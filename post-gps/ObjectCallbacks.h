@@ -1,7 +1,6 @@
 #ifndef ObjectCallbacks_h
 #define ObjectCallbacks_h
 
-#ifdef NOMO
 #include "vmtimer.h"
 #include "vmtype.h"
 #include "vmkeypad.h"
@@ -45,6 +44,5 @@ public:
 
 };
 
-#endif
 
 #endif // ObjectCallbacks_h

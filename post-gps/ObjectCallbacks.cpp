@@ -1,4 +1,3 @@
-#ifdef NOMO
 #include "ObjectCallbacks.h"
 #include <functional>
 
@@ -101,4 +100,3 @@ ObjectCallbacks::gsmPower(VMBOOL success)
 }
 #endif
 
-#endif

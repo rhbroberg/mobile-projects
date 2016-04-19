@@ -1,6 +1,7 @@
 #ifndef ApplicationManager_h
 #define ApplicationManager_h
 
+#include <functional>
 #include "GPSHelper.h"
 #include "MQTTnative.h"
 #include "GSMNetwork.h"
@@ -15,16 +16,11 @@ public:
 	void start();
 	void cellChanged();
 
-	// these sigs needed for static wrapper callback helpers
-	void hostResolved(char *);
-	void networkReady();
-	VMINT32 go();
-	// these sigs needed for static wrapper callback helpers
-
 protected:
 	void mqttConnect(VM_TIMER_ID_NON_PRECISE timer_id);
 	void mqttInit();
 //	void logit(VM_TIMER_ID_NON_PRECISE timer_id);
+	VMINT32 go();
 	void postEntry();
 	void archiveEntry();
 	void logit();
@@ -41,15 +37,11 @@ protected:
 	unsigned int _publishFailures;;
 	VMCHAR _locationStatus[1024];
 
-#ifdef NOMO
 	std::function<void (char *host)> _resolvedPtr;
 	std::function<void (void)> _networkReadyPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _mqttConnectPtr;
 //	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _logitPtr;
 	std::function<VMINT32 (void)> _logitPtr;
-#else
-
-#endif
 
 	VM_THREAD_HANDLE _thread;
 
