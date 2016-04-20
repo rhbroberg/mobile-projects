@@ -31,7 +31,7 @@ ApplicationManager appmgr;
 LEDBlinker myBlinker;
 
 #include "vmwdt.h"
-VM_WDT_HANDLE _watchdog;
+VM_WDT_HANDLE _watchdog = -1;
 
 const bool
 showBatteryStats()
@@ -123,18 +123,6 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 #define DO_HE_BITE
 #ifdef DO_HE_BITE
 	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
-#endif
-	// maybe this has to go in the non-main thread?
-#ifdef FIRE_BAD
-	{
-		int level = analogRead(0);
-		if (level < 840)
-		{
-			level = 840;
-		}
-		int percentLevel =  (level - 840) * 100 / (1023 - 840);
-		vm_log_info("specific battery level: %d", percentLevel);
-	}
 #endif
    vm_log_info("watchdog id is %d", _watchdog);
 

@@ -19,11 +19,11 @@ public:
 protected:
 	void mqttConnect(VM_TIMER_ID_NON_PRECISE timer_id);
 	void mqttInit();
-//	void logit(VM_TIMER_ID_NON_PRECISE timer_id);
+	void logit(VM_TIMER_ID_NON_PRECISE timer_id);
+//  void logit();
 	VMINT32 go();
 	void postEntry();
 	void archiveEntry();
-	void logit();
 
 	GPSHelper _gps;
 	MQTTnative *_portal;
@@ -40,8 +40,8 @@ protected:
 	std::function<void (char *host)> _resolvedPtr;
 	std::function<void (void)> _networkReadyPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _mqttConnectPtr;
-//	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _logitPtr;
-	std::function<VMINT32 (void)> _logitPtr;
+	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _logitPtr;
+//	std::function<VMINT32 (void)> _logitPtr;
 
 	VM_THREAD_HANDLE _thread;
 
