@@ -27,9 +27,16 @@ RephoneClient::connect(IPAddress ip, uint16_t port)
 
     vm_log_debug("connecting to %s:%d", host, port);
 
-    _peer = socket(PF_INET, SOCK_STREAM, 0);
+    if (_peer == 0)
+    {
+        _peer = socket(PF_INET, SOCK_STREAM, 0);
+        vm_log_debug("created socket %d", _peer);
+    }
+    else
+    {
+    	vm_log_debug("reusing socket %d", _peer);
+    }
 
-    vm_log_debug("created socket %d", _peer);
     if (_peer == -1)
       {
         return 0;
@@ -139,7 +146,12 @@ RephoneClient::connect(IPAddress ip, uint16_t port)
   RephoneClient::stop()
   {
     vm_log_debug("stopping connection on socket %d", _peer);
-    vm_soc_close_socket(_peer);
+
+    int result = vm_soc_shutdown(_peer, VM_SOC_SHUT_RDWR);
+    vm_log_info("socket shutdown result: %d", result);
+    result = vm_soc_close_socket(_peer);
+    vm_log_info("socket close result: %d", result);
+    _peer = 0;
     _connected = false;
   }
 

@@ -89,11 +89,15 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 				myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
 			}
 
+#ifdef NOT
 			static int onoff = 1;
 			onoff = 1 - onoff;
 
 			vm_log_info("turning power to %d", onoff);
 			vm_gsm_switch_mode(onoff, gsmPowerCallback);
+#else
+			appmgr.bounce();
+#endif
 		}
 		return 0;
 	}

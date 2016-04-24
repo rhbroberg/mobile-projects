@@ -21,6 +21,10 @@ public:
 	VMINT32 go();
 	// these sigs needed for static wrapper callback helpers
 	void logit();
+	void bounce()
+	{
+		_bounce = true;
+	}
 
 protected:
 	void mqttConnect(VM_TIMER_ID_NON_PRECISE timer_id);
@@ -37,6 +41,7 @@ protected:
 	char *_hostIP;
 	DataJournal _dataJournal;
 	bool _networkIsReady;
+	bool _bounce;
 
 	unsigned int _publishFailures;;
 	VMCHAR _locationStatus[1024];

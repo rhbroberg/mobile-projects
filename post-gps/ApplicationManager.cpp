@@ -72,6 +72,7 @@ ApplicationManager::ApplicationManager()
   , _locationTopic(NULL)
   , _hostIP(NULL)
   , _networkIsReady(false)
+  , _bounce(false)
 {
 #ifdef NOMO
 //	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
@@ -142,6 +143,13 @@ ApplicationManager::postEntry()
 void
 ApplicationManager::logit()
 {
+	if (_bounce)
+	{
+		vm_log_info("bouncing");
+		_bounce = false;
+		_portal->disconnect();
+		_portal->connect();
+	}
 	// blinky status lights change in this block
 	if ((_gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
 			_locationStatus, _network.simStatus())))
