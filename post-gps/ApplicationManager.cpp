@@ -23,6 +23,11 @@ extern VM_WDT_HANDLE _watchdog;
 #include "vmhttps.h"
 void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data);
 
+void logitWrapper(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
+{
+	((ApplicationManager *)user_data)->logit();
+}
+
 // static
 void
 resolveHostWrapper(char *host, void *user_data)
@@ -50,11 +55,13 @@ ApplicationManager::networkReady()
 	_network.resolveHost((VMSTR) AIO_SERVER,  resolveHostWrapper, this);
 }
 
+#ifdef NO
 VMINT32
 logitWrapper(VM_THREAD_HANDLE handle, void *user_data)
 {
 	return ((ApplicationManager *)user_data)->go();
 }
+#endif
 
 // needs _watchdog, _portal, _blinker
 ApplicationManager::ApplicationManager()
@@ -189,8 +196,8 @@ ApplicationManager::mqttInit()
 
 	_portal = new MQTTnative(_hostIP, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
 	_portal->setTimeout(15000);
-	_locationTopic = _portal->topicHandle("location");
-	//_portal->start();
+	_locationTopic = _portal->topicHandle("l");
+	_portal->start();
 	_networkIsReady = true;
 
 	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
@@ -210,7 +217,7 @@ ApplicationManager::start()
 	vm_timer_create_non_precise(60000, myHttpSend, NULL);
 
 #else
-//	_network.enable(networkReadyWrapper, this, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+	_network.enable(networkReadyWrapper, this, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
 #endif
 
 	VM_RESULT openStatus;
@@ -226,7 +233,7 @@ ApplicationManager::start()
 		VM_RESULT result = _dataJournal.write((VMCSTR) "starting up");
 	}
 
-	_thread = vm_thread_create(logitWrapper, this, 127);
-//	vm_timer_create_non_precise(4000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
+//	_thread = vm_thread_create(logitWrapper, this, 127);
+	vm_timer_create_non_precise(2000, logitWrapper, this);
 
 }

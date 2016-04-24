@@ -20,6 +20,7 @@ public:
 	void networkReady();
 	VMINT32 go();
 	// these sigs needed for static wrapper callback helpers
+	void logit();
 
 protected:
 	void mqttConnect(VM_TIMER_ID_NON_PRECISE timer_id);
@@ -27,7 +28,6 @@ protected:
 //	void logit(VM_TIMER_ID_NON_PRECISE timer_id);
 	void postEntry();
 	void archiveEntry();
-	void logit();
 
 	GPSHelper _gps;
 	MQTTnative *_portal;
