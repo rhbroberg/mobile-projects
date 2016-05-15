@@ -120,7 +120,7 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 		myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
 	}
 
-#define DO_HE_BITE
+//#define DO_HE_BITE
 #ifdef DO_HE_BITE
 	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
 #endif

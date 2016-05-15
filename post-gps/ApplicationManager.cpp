@@ -195,6 +195,6 @@ ApplicationManager::start()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	vm_timer_create_non_precise(4000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
 
 }
