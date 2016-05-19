@@ -173,13 +173,13 @@ void MQTTnative::connect()
 
 	vm_log_info("Connecting to MQTT... ");
 
-	uint8_t retries = 90;
+	uint8_t retries = 3;
 	while ((ret = _mqtt.connect()) != 0)
 	{ // connect will return 0 for connected
 		vm_log_info("error message is %s", (const prog_char *)_mqtt.connectErrorString(ret));
 		vm_log_info("Retrying MQTT connection in 5 seconds...");
 		_mqtt.disconnect();
-		delay(5000); // wait 5 seconds
+		delay(1000); // wait 5 seconds
 		retries--;
 		if (retries == 0)
 		{
