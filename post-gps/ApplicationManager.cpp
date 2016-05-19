@@ -30,8 +30,8 @@ ApplicationManager::ApplicationManager()
   , _hostIP(NULL)
   , _networkIsReady(false)
 {
-//	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
-	_logitPtr = [&] (void) { return go(); };
+	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
+//	_logitPtr = [&] (void) { return go(); };
 
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
 //	_resolvedPtr = [&] (char *host) { _hostIP = host; vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_mqttConnectPtr); };
@@ -92,7 +92,7 @@ ApplicationManager::postEntry()
 }
 
 void
-ApplicationManager::logit()
+ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 {
 	// blinky status lights change in this block
 	if ((_gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
@@ -133,7 +133,7 @@ ApplicationManager::go()
 			vm_log_info("starting up portal");
 			_portal->start();
 		}
-		logit();
+		logit(0);
 	}
 }
 
@@ -145,8 +145,8 @@ ApplicationManager::mqttInit()
 
 	_portal = new MQTTnative(_hostIP, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
 	_portal->setTimeout(15000);
-	_locationTopic = _portal->topicHandle("location");
-	//_portal->start();
+	_locationTopic = _portal->topicHandle("loc");
+	_portal->start();
 	_networkIsReady = true;
 
 	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
@@ -182,7 +182,6 @@ ApplicationManager::start()
 		VM_RESULT result = _dataJournal.write((VMCSTR) "starting up");
 	}
 
-	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-//	vm_timer_create_non_precise(4000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
-
+//	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
+	vm_timer_create_non_precise(10000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
 }

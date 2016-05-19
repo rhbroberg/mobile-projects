@@ -68,20 +68,10 @@ GPSHelper::sample()
 	if (status = LGPS.check_online())
 	{
 		utc_date_time = LGPS.get_utc_date_time();
-		vm_log_info(
-				"GPS UTC:%02d-%02d-%02d %02d:%02d:%02d", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4], utc_date_time[5]);
-		vm_log_info("GPS status is %c", LGPS.get_status());
-		vm_log_info(
-				"GPS latitude is %c:%f", LGPS.get_ns(), LGPS.get_latitude());
-		vm_log_info(
-				"GPS longitude is %c:%f", LGPS.get_ew(), LGPS.get_longitude());
-		vm_log_info("GPS speed is %f", LGPS.get_speed());
-		vm_log_info("GPS course is %f", LGPS.get_course());
-		vm_log_info("GPS position fix is %c", LGPS.get_position_fix());
-		vm_log_info("GPS sate used is %d", LGPS.get_sate_used());
-		vm_log_info("GPS altitude is %f", LGPS.get_altitude());
-		vm_log_info("GPS mode is %c", LGPS.get_mode());
-		vm_log_info("GPS mode2 is %c", LGPS.get_mode2());
+		vm_log_info("GPS status/position fix/count/mode/mode2 is %c/%c/%d/%c/%c", LGPS.get_status(), LGPS.get_position_fix(), LGPS.get_sate_used(), LGPS.get_mode(), LGPS.get_mode2());
+		vm_log_info("GPS UTC:%02d-%02d-%02d %02d:%02d:%02d", utc_date_time[0], utc_date_time[1], utc_date_time[2], utc_date_time[3], utc_date_time[4], utc_date_time[5]);
+		vm_log_info("GPS lat/long is %c:%f/%c:%f", LGPS.get_ns(), LGPS.get_latitude(), LGPS.get_ew(), LGPS.get_longitude());
+		vm_log_info("GPS speed/course/alt is %f/%f/%f", LGPS.get_speed(), LGPS.get_course(), LGPS.get_altitude());
 
 		updateRTC();
 	}

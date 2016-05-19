@@ -36,8 +36,8 @@ void GSMNetwork::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, 
 			break;
 		case VM_BEARER_ACTIVATED:
 		{
-			VM_RESULT ret = vm_gsm_gprs_hold_bearer(VM_GSM_GPRS_HANDLE_TYPE_TCP, handle);
-			vm_log_info("bearer is activated, hold = %d", ret);
+			//VM_RESULT ret = vm_gsm_gprs_hold_bearer(VM_GSM_GPRS_HANDLE_TYPE_TCP, handle);
+			//vm_log_info("bearer is activated, hold = %d", ret);
 			_isEnabled = true;
 			_enabledCallback();
 			break;
