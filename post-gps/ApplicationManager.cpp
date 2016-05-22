@@ -188,13 +188,14 @@ void testme();
 void
 ApplicationManager::start()
 {
+#define NO
 #ifdef NO
 	// allow bluetooth bootstrapping configuration
 	_config.start();
 	_config.enableBLE();
 	_config.mapEEPROM();
 #else
-//	testme();
+	testme();
 #endif
 
 	// set timer to disableBLE() after poweron window

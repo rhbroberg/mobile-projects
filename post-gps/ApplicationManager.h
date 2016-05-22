@@ -8,7 +8,7 @@
 #include "DataJournal.h"
 #include "vmtimer.h"
 #include "vmthread.h"
-//#include "ConfigurationManager.h"
+#include "ConfigurationManager.h"
 
 class ApplicationManager
 {
@@ -45,7 +45,7 @@ protected:
 //	std::function<VMINT32 (void)> _logitPtr;
 
 	VM_THREAD_HANDLE _thread;
-//	gpstracker::ConfigurationManager _config;
+	gpstracker::ConfigurationManager _config;
 
 };
 
