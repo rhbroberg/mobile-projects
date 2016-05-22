@@ -15,6 +15,6 @@
 		<options>
 			<compile>-mthumb-interwork -c -gdwarf-2 -gstrict-dwarf -fpic -mcpu=arm7tdmi-s -fvisibility=hidden -mthumb -mlittle-endian -O2 -D__COMPILER_GCC__ -fno-exceptions -fno-non-call-exceptions</compile>
 			<cppcompile>-fno-rtti -mthumb-interwork -c -gdwarf-2 -gstrict-dwarf -fpic -mcpu=arm7tdmi-s -fvisibility=hidden -mthumb -mlittle-endian -O2 -D__COMPILER_GCC__  -fno-exceptions -fno-non-call-exceptions -std=c++11</cppcompile>
-			<link>-Wl,--gc-sections -fpic -pie --specs=nosys.specs -lstdc++</link>
+			<link>-Wl,--gc-sections -fpic -pie --specs=nosys.specs -lstdc++ -lm</link>
 		</options>
 	</packageinfo>

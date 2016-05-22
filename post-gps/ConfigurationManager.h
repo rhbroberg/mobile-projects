@@ -1,23 +1,44 @@
-#ifndef ConfigurationManager_h
-#define ConfigurationManager_h
+#pragma once
 
-// move me into a configuration class
-#define APN "wholesale"
-#define USING_PROXY VM_FALSE
-#define PROXY_IP    "0.0.0.0"
-#define PROXY_PORT  80
+// silly headers, ancient broken macros
+#include "stdint.h"
+#include "wiring_constants.h"
+#undef min
+#undef max
+// silly headers
 
-#define AIO_SERVER      "io.adafruit.com"
-//#define AIO_SERVER              "52.5.238.97"
-#define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define AIO_USERNAME    "rhbroberg"
-#define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
+#include "eeprom/Manager.h"
+#include "eeprom/PersistentByte.h"
+#include "eeprom/Persistent.h"
 
-// Store the MQTT server, username, and password in flash memory.
-// This is required for using the Adafruit MQTT library.
-const char MQTT_SERVER[] PROGMEM = AIO_SERVER;
-const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
-const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
-// move me into a configuration class
+#include "gatt/Server.h"
 
-#endif // ConfigurationManager_h
+namespace gpstracker
+{
+
+class ConfigurationManager
+{
+public:
+	ConfigurationManager();
+
+	void start();
+
+	void mapEEPROM();
+	void enableBLE();
+	void disableBLE();
+	void addService(const char *serviceName, gatt::Service *);
+	void addCharacteristic(const char *serviceName, gatt::Characteristic *);
+
+protected:
+	void updateBLEName(const char *name, const unsigned length);
+	void buildServices();
+
+	eeprom::Manager *_eeprom;
+	gatt::Server *_gatt;
+
+	static eeprom::PersistentByte _frist;
+	static eeprom::Persistent<long> _second;
+	static eeprom::Persistent<long> _third;
+};
+
+}

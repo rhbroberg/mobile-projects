@@ -14,7 +14,24 @@ extern LEDBlinker myBlinker;
 #include "vmwdt.h"
 extern VM_WDT_HANDLE _watchdog;
 
-#include "ConfigurationManager.h"
+// move me into a configuration class
+#define APN "wholesale"
+#define USING_PROXY VM_FALSE
+#define PROXY_IP    "0.0.0.0"
+#define PROXY_PORT  80
+
+#define AIO_SERVER      "io.adafruit.com"
+//#define AIO_SERVER              "52.5.238.97"
+#define AIO_SERVERPORT  1883                   // use 8883 for SSL
+#define AIO_USERNAME    "rhbroberg"
+#define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
+
+// Store the MQTT server, username, and password in flash memory.
+// This is required for using the Adafruit MQTT library.
+const char MQTT_SERVER[] PROGMEM = AIO_SERVER;
+const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
+const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
+// move me into a configuration class
 
 // #include HTTPSSender.h
 #include "vmhttps.h"
@@ -94,6 +111,12 @@ ApplicationManager::postEntry()
 void
 ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 {
+	// this block moves back to 'go' once it is its own thread
+	if (_watchdog >= 0)
+	{
+		vm_wdt_reset(_watchdog); // loop which checks accelerometer will need to take this task over; and when we sleep from accelerometer this needs to be stop()ed
+	}
+
 	// blinky status lights change in this block
 	if ((_gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
 			_locationStatus, _network.simStatus())))
@@ -116,23 +139,28 @@ ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 	}
 }
 
+#include "vmdcl_gpio.h"
+#include "variant.h"
+
 VMINT32
 ApplicationManager::go()
 {
 	while (true)
 	{
-		vm_thread_sleep(4000);
-
-		if (_watchdog >= 0)
-		{
-			vm_wdt_reset(_watchdog); // loop which checks accelerometer will need to take this task over; and when we sleep from accelerometer this needs to be stop()ed
-		}
+		vm_thread_sleep(40000);
 
 		if (_networkIsReady)
 		{
 			vm_log_info("starting up portal");
 			_portal->start();
 		}
+
+		// this works as long as it's not in the main thread
+		{
+			int level = analogRead(0);
+			vm_log_info("specific battery level: %d", level);
+		}
+
 		logit(0);
 	}
 }
@@ -140,22 +168,37 @@ ApplicationManager::go()
 void
 ApplicationManager::mqttInit()
 {
-	//vm_timer_delete_non_precise(timer_id);
 	vm_log_debug("using native adafruit connection to connect to %s", _hostIP);
 
 	_portal = new MQTTnative(_hostIP, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
-	_portal->setTimeout(15000);
-	_locationTopic = _portal->topicHandle("loc");
+	_portal->setTimeout(15001);
+	_locationTopic = _portal->topicHandle("l");
+	// contains calls which must be made using LTask-like facility (use std::functional) else random disconnections
+	// must be moved into 'go' in separate thread else connection failure retry...sleep results in main thread failure
 	_portal->start();
 	_networkIsReady = true;
 
 	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
 }
 
+void testme();
+
+#include "vmfirmware.h"
+
 void
 ApplicationManager::start()
 {
+#define NO
+#ifdef NO
 	// allow bluetooth bootstrapping configuration
+	_config.start();
+	_config.enableBLE();
+	_config.mapEEPROM();
+#else
+	testme();
+#endif
+
+	// set timer to disableBLE() after poweron window
 
 	// retrieve configuration from manager
 
@@ -183,5 +226,6 @@ ApplicationManager::start()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	vm_timer_create_non_precise(10000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	vm_timer_create_non_precise(8000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
+
 }

@@ -157,6 +157,8 @@ void MQTTnative::disconnect()
 	_mqtt.disconnect();
 }
 
+#include "vmpwr.h"
+
 // Function to connect and reconnect as necessary to the MQTT server.
 // Should be called in the loop function and it will take care if connecting.
 void MQTTnative::connect()
@@ -171,13 +173,13 @@ void MQTTnative::connect()
 
 	vm_log_info("Connecting to MQTT... ");
 
-	uint8_t retries = 90;
+	uint8_t retries = 3;
 	while ((ret = _mqtt.connect()) != 0)
 	{ // connect will return 0 for connected
 		vm_log_info("error message is %s", (const prog_char *)_mqtt.connectErrorString(ret));
 		vm_log_info("Retrying MQTT connection in 5 seconds...");
 		_mqtt.disconnect();
-		delay(5000); // wait 5 seconds
+		delay(1000); // wait 5 seconds
 		retries--;
 		if (retries == 0)
 		{
@@ -186,6 +188,7 @@ void MQTTnative::connect()
 			{
 				// much more reasonable is to continue trying while data is logging
 				vm_log_info("bummer");
+				vm_pwr_reboot();
 				delay(5000);
 			}
 		}

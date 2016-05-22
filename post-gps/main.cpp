@@ -58,6 +58,7 @@ gsmPowerCallback(VMBOOL success)
 	vm_log_info("power switch success is %d", success);
 }
 
+// map these into calls to the ApplicationManager::buttonAction()
 VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 {
 	vm_log_info("key event=%d,key code=%d", event, code);
@@ -80,6 +81,9 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 			// up
 			vm_log_debug("key is released\n");
 
+			//myBlinker.start();
+		    appmgr.start();
+#ifdef TESTME
 			if (showBatteryStats())
 			{
 				myBlinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
@@ -94,6 +98,7 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 
 			vm_log_info("turning power to %d", onoff);
 			vm_gsm_switch_mode(onoff, gsmPowerCallback);
+#endif
 		}
 		return 0;
 	}
@@ -106,10 +111,11 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 
 	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
 			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
-
+#ifdef NOPE
 	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());
-	vm_bt_cm_switch_off();
+	vm_bt_cm_switch_on();
 	vm_log_info("bluetooth power status after switching off :%d", vm_bt_cm_get_power_status());
+#endif
 
 	if (showBatteryStats())
 	{
@@ -124,22 +130,12 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 #ifdef DO_HE_BITE
 	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
 #endif
-	// maybe this has to go in the non-main thread?
-#ifdef FIRE_BAD
-	{
-		int level = analogRead(0);
-		if (level < 840)
-		{
-			level = 840;
-		}
-		int percentLevel =  (level - 840) * 100 / (1023 - 840);
-		vm_log_info("specific battery level: %d", percentLevel);
-	}
-#endif
-   vm_log_info("watchdog id is %d", _watchdog);
+	vm_log_info("watchdog id is %d", _watchdog);
 
     appmgr.start();
 }
+
+#include "vmfirmware.h"
 
 // events here should really iterate over registered listeners, using std::function objects or regular listener pattern
 void handle_sysevt(VMINT message, VMINT param)
@@ -149,8 +145,20 @@ void handle_sysevt(VMINT message, VMINT param)
 	{
 //	case VM_EVENT_CREATE:
 	case VM_EVENT_PAINT:
-		vm_timer_create_non_precise(100, initializeSystem, NULL);
-		break;
+	{
+		VMCHAR firmwareValue[30];
+
+		VMUINT status = vm_firmware_get_info(firmwareValue,
+				sizeof(firmwareValue),
+				VM_FIRMWARE_HOST_VERSION);
+		vm_log_info("firmware version is %s", firmwareValue);
+		status = vm_firmware_get_info(firmwareValue,
+				sizeof(firmwareValue),
+				VM_FIRMWARE_HOST_MAX_MEM);
+		vm_log_info("firmware max mem is %s", firmwareValue);
+	}
+	vm_timer_create_non_precise(100, initializeSystem, NULL);
+	break;
 
 	case VM_EVENT_CELL_INFO_CHANGE:
 		/* After opening the cell, this event will occur when the cell info changes.

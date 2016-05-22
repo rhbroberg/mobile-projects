@@ -8,6 +8,7 @@
 #include "DataJournal.h"
 #include "vmtimer.h"
 #include "vmthread.h"
+#include "ConfigurationManager.h"
 
 class ApplicationManager
 {
@@ -20,10 +21,10 @@ protected:
 	void mqttConnect(VM_TIMER_ID_NON_PRECISE timer_id);
 	void mqttInit();
 	void logit(VM_TIMER_ID_NON_PRECISE timer_id);
+//  void logit();
 	VMINT32 go();
 	void postEntry();
 	void archiveEntry();
-//	void logit();
 
 	GPSHelper _gps;
 	MQTTnative *_portal;
@@ -44,6 +45,7 @@ protected:
 //	std::function<VMINT32 (void)> _logitPtr;
 
 	VM_THREAD_HANDLE _thread;
+	gpstracker::ConfigurationManager _config;
 
 };
 

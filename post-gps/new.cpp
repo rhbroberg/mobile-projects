@@ -17,26 +17,27 @@
 */
 
 #include <stdlib.h>
+#include "vmmemory.h"
 
 void *operator new(size_t size) {
-  return malloc(size);
+  return vm_malloc(size);
 }
 
 void *operator new[](size_t size) {
-  return malloc(size);
+  return vm_malloc(size);
 }
 
 void operator delete(void * ptr) {
   if (ptr)
   {
-	  free(ptr);
+	  vm_free(ptr);
   }
 }
 
 void operator delete[](void * ptr) {
   if (ptr)
   {
-	  free(ptr);
+	  vm_free(ptr);
   }
 }
 
