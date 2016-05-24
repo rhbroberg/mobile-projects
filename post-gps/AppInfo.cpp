@@ -1,12 +1,17 @@
 #include "AppInfo.h"
+#include <string.h>
+#include <stdlib.h>
 #include "vmtag.h"
 #include "vmmemory.h"
 #include "vmchset.h"
 #include "vmlog.h"
+#include "vmfirmware.h"
 
 AppInfo::AppInfo()
  : _version(0)
  , _name(NULL)
+, _firmware(NULL)
+, _maxMem(0)
 {
 }
 
@@ -91,4 +96,30 @@ AppInfo::getName()
 		}
 	}
 	return _name;
+}
+
+const VMCSTR
+AppInfo::getFirmware()
+{
+	VMCHAR tmp[30];
+
+	VMUINT status = vm_firmware_get_info(tmp, sizeof(tmp), VM_FIRMWARE_HOST_VERSION);
+	vm_log_info("firmware version is %s", tmp);
+
+	_firmware = (VMSTR) vm_calloc(strlen((const char *)tmp) + 1);
+	memcpy(_firmware, (const char *)tmp, strlen((const char *)tmp));
+
+	return _firmware;
+}
+
+const unsigned long
+AppInfo::getMaxMem()
+{
+	VMCHAR tmp[30];
+
+	VMUINT status = vm_firmware_get_info(tmp, sizeof(tmp), VM_FIRMWARE_HOST_MAX_MEM);
+	vm_log_info("firmware max mem is %s", tmp);
+	_maxMem = atol((const char *)tmp);
+
+	return _maxMem;
 }

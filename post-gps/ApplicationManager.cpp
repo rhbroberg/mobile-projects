@@ -188,14 +188,17 @@ void testme();
 void
 ApplicationManager::start()
 {
-#define NO
+//#define NO
 #ifdef NO
 	// allow bluetooth bootstrapping configuration
 	_config.start();
 	_config.enableBLE();
 	_config.mapEEPROM();
 #else
-	testme();
+//	testme();
+	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());
+	vm_bt_cm_switch_off();
+	vm_log_info("bluetooth power status after switching off :%d", vm_bt_cm_get_power_status());
 #endif
 
 	// set timer to disableBLE() after poweron window
@@ -226,6 +229,6 @@ ApplicationManager::start()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	vm_timer_create_non_precise(8000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	vm_timer_create_non_precise(3000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
 
 }

@@ -111,6 +111,8 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 
 	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
 			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
+	vm_log_info("resources: firmware '%s', max memory %d", _applicationInfo.getFirmware(), _applicationInfo.getMaxMem());
+
 #ifdef NOPE
 	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());
 	vm_bt_cm_switch_on();
@@ -135,8 +137,6 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
     appmgr.start();
 }
 
-#include "vmfirmware.h"
-
 // events here should really iterate over registered listeners, using std::function objects or regular listener pattern
 void handle_sysevt(VMINT message, VMINT param)
 {
@@ -145,18 +145,6 @@ void handle_sysevt(VMINT message, VMINT param)
 	{
 //	case VM_EVENT_CREATE:
 	case VM_EVENT_PAINT:
-	{
-		VMCHAR firmwareValue[30];
-
-		VMUINT status = vm_firmware_get_info(firmwareValue,
-				sizeof(firmwareValue),
-				VM_FIRMWARE_HOST_VERSION);
-		vm_log_info("firmware version is %s", firmwareValue);
-		status = vm_firmware_get_info(firmwareValue,
-				sizeof(firmwareValue),
-				VM_FIRMWARE_HOST_MAX_MEM);
-		vm_log_info("firmware max mem is %s", firmwareValue);
-	}
 	vm_timer_create_non_precise(100, initializeSystem, NULL);
 	break;
 
