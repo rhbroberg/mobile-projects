@@ -9,6 +9,7 @@
 #include "vmtimer.h"
 #include "vmthread.h"
 #include "ConfigurationManager.h"
+#include "PersistentGATTByte.h"
 
 class ApplicationManager
 {
@@ -18,6 +19,9 @@ public:
 	void cellChanged();
 
 protected:
+	void activate();
+	void bleClientAttached();
+	void bleClientDetached();
 	void mqttConnect(VM_TIMER_ID_NON_PRECISE timer_id);
 	void mqttInit();
 	void logit(VM_TIMER_ID_NON_PRECISE timer_id);
@@ -46,7 +50,15 @@ protected:
 
 	VM_THREAD_HANDLE _thread;
 	gpstracker::ConfigurationManager _config;
+	VM_TIMER_ID_NON_PRECISE _bleTimeout;
+	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _configTimeout;
 
+public:
+	static gpstracker::PersistentGATTByte _apn;
+	static gpstracker::PersistentGATTByte _proxyIP;
+	static gpstracker::PersistentGATTByte _aioServer;
+	static gpstracker::PersistentGATTByte _aioUsername;
+	static gpstracker::PersistentGATTByte _aioKey;
 };
 
 #endif //  ApplicationManager_h

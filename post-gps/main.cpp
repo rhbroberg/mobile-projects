@@ -1,3 +1,5 @@
+#include "Arduino.h"
+
 #include "vmtype.h" 
 #include "vmboard.h"
 #include "vmsystem.h"
@@ -21,8 +23,10 @@
 #include "vmgsm.h"
 
 #include "vmbt_cm.h"
+
 #include "AppInfo.h"
 AppInfo _applicationInfo;
+
 
 #include "ApplicationManager.h"
 ApplicationManager appmgr;

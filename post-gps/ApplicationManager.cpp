@@ -1,3 +1,5 @@
+#include "Arduino.h"
+
 #include "ApplicationManager.h"
 #include "vmlog.h"
 #include "vmstdlib.h"
@@ -14,24 +16,29 @@ extern LEDBlinker myBlinker;
 #include "vmwdt.h"
 extern VM_WDT_HANDLE _watchdog;
 
+#include "PersistentGATTByte.h"
+#include "UUIDs.h"
+
+using namespace gpstracker;
+
+#ifdef GONE
 // move me into a configuration class
 #define APN "wholesale"
-#define USING_PROXY VM_FALSE
 #define PROXY_IP    "0.0.0.0"
-#define PROXY_PORT  80
-
 #define AIO_SERVER      "io.adafruit.com"
-//#define AIO_SERVER              "52.5.238.97"
-#define AIO_SERVERPORT  1883                   // use 8883 for SSL
 #define AIO_USERNAME    "rhbroberg"
 #define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
-
 // Store the MQTT server, username, and password in flash memory.
 // This is required for using the Adafruit MQTT library.
 const char MQTT_SERVER[] PROGMEM = AIO_SERVER;
 const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
 const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
 // move me into a configuration class
+#endif
+
+#define AIO_SERVERPORT  1883                   // use 8883 for SSL
+#define USING_PROXY VM_FALSE
+#define PROXY_PORT  80
 
 // #include HTTPSSender.h
 #include "vmhttps.h"
@@ -46,6 +53,7 @@ ApplicationManager::ApplicationManager()
   , _locationTopic(NULL)
   , _hostIP(NULL)
   , _networkIsReady(false)
+  , _bleTimeout(0)
 {
 	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
 //	_logitPtr = [&] (void) { return go(); };
@@ -53,7 +61,7 @@ ApplicationManager::ApplicationManager()
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
 //	_resolvedPtr = [&] (char *host) { _hostIP = host; vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_mqttConnectPtr); };
 	_resolvedPtr = [&] (char *host) { _hostIP = host; mqttInit(); };
-	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) AIO_SERVER, _resolvedPtr); };
+	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) _aioServer.getString(), _resolvedPtr); };
 }
 
 void
@@ -170,7 +178,7 @@ ApplicationManager::mqttInit()
 {
 	vm_log_debug("using native adafruit connection to connect to %s", _hostIP);
 
-	_portal = new MQTTnative(_hostIP, AIO_USERNAME, AIO_KEY, AIO_SERVERPORT);
+	_portal = new MQTTnative(_hostIP,(const char *) _aioUsername.getString(), (const char *)_aioKey.getString(), AIO_SERVERPORT);
 	_portal->setTimeout(15001);
 	_locationTopic = _portal->topicHandle("l");
 	// contains calls which must be made using LTask-like facility (use std::functional) else random disconnections
@@ -184,35 +192,59 @@ ApplicationManager::mqttInit()
 void testme();
 
 #include "vmfirmware.h"
+#include "ObjectCallbacks.h"
+
+void
+ApplicationManager::bleClientAttached()
+{
+	VM_RESULT r = vm_timer_delete_non_precise(_bleTimeout);
+	_bleTimeout = 0;
+
+	vm_log_info("client attached for configuration; waiting for disconnect");
+}
+
+void
+ApplicationManager::bleClientDetached()
+{
+	vm_log_info("client detached; starting up now");
+
+	activate();
+}
 
 void
 ApplicationManager::start()
 {
-//#define NO
-#ifdef NO
 	// allow bluetooth bootstrapping configuration
 	_config.start();
 	_config.enableBLE();
 	_config.mapEEPROM();
-#else
-//	testme();
-	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());
-	vm_bt_cm_switch_off();
-	vm_log_info("bluetooth power status after switching off :%d", vm_bt_cm_get_power_status());
-#endif
+	std::function<void()> attachHook = [&] () { bleClientAttached();};
+	std::function<void()> detachHook = [&] () { bleClientDetached();};
 
-	// set timer to disableBLE() after poweron window
+	_config.bindConnectionListener(attachHook, detachHook);
 
-	// retrieve configuration from manager
+	_configTimeout = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { activate(); };
+	_bleTimeout = vm_timer_create_non_precise(30000, ObjectCallbacks::timerNonPrecise, &_configTimeout);
+}
 
-//#define USE_HTTP
+void
+ApplicationManager::activate()
+{
+	if (_bleTimeout)
+	{
+		VM_RESULT r = vm_timer_delete_non_precise(_bleTimeout);
+		_bleTimeout = 0;
+	}
+
+	_config.disableBLE();
+	//#define USE_HTTP
 #ifdef USE_HTTP
 	myBlinker.change(LEDBlinker::white, 3000, 3000, 1024);
 	//	  vm_timer_create_non_precise(60000, ledtest, NULL);
 	vm_timer_create_non_precise(60000, myHttpSend, NULL);
 
 #else
-	_network.enable(_networkReadyPtr, APN, PROXY_IP, USING_PROXY, PROXY_PORT);
+	_network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), USING_PROXY, PROXY_PORT);
 #endif
 
 	VM_RESULT openStatus;
@@ -230,5 +262,4 @@ ApplicationManager::start()
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
 	vm_timer_create_non_precise(3000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
-
 }
