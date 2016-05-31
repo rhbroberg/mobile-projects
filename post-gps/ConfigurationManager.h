@@ -1,14 +1,5 @@
 #pragma once
 
-#ifdef NOPE
-// silly headers, ancient broken macros
-#include "stdint.h"
-#include "wiring_constants.h"
-#undef min
-#undef max
-// silly headers
-#endif
-
 #include "eeprom/Manager.h"
 #include "eeprom/PersistentByte.h"
 #include "eeprom/Persistent.h"

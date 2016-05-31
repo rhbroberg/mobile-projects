@@ -21,21 +21,6 @@ extern VM_WDT_HANDLE _watchdog;
 
 using namespace gpstracker;
 
-#ifdef GONE
-// move me into a configuration class
-#define APN "wholesale"
-#define PROXY_IP    "0.0.0.0"
-#define AIO_SERVER      "io.adafruit.com"
-#define AIO_USERNAME    "rhbroberg"
-#define AIO_KEY         "b8929d313c50fe513da199b960043b344e2b3f1f"
-// Store the MQTT server, username, and password in flash memory.
-// This is required for using the Adafruit MQTT library.
-const char MQTT_SERVER[] PROGMEM = AIO_SERVER;
-const char MQTT_USERNAME[] PROGMEM = AIO_USERNAME;
-const char MQTT_PASSWORD[] PROGMEM = AIO_KEY;
-// move me into a configuration class
-#endif
-
 #define AIO_SERVERPORT  1883                   // use 8883 for SSL
 #define USING_PROXY VM_FALSE
 #define PROXY_PORT  80
@@ -55,11 +40,10 @@ ApplicationManager::ApplicationManager()
   , _networkIsReady(false)
   , _bleTimeout(0)
 {
-	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
 //	_logitPtr = [&] (void) { return go(); };
-
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
 //	_resolvedPtr = [&] (char *host) { _hostIP = host; vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_mqttConnectPtr); };
+	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
 	_resolvedPtr = [&] (char *host) { _hostIP = host; mqttInit(); };
 	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) _aioServer.getString(), _resolvedPtr); };
 }
@@ -115,6 +99,9 @@ ApplicationManager::postEntry()
 		}
 	}
 }
+
+#include "AppInfo.h"
+extern AppInfo _applicationInfo;
 
 void
 ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
@@ -189,8 +176,6 @@ ApplicationManager::mqttInit()
 	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
 }
 
-void testme();
-
 #include "vmfirmware.h"
 #include "ObjectCallbacks.h"
 
@@ -201,12 +186,14 @@ ApplicationManager::bleClientAttached()
 	_bleTimeout = 0;
 
 	vm_log_info("client attached for configuration; waiting for disconnect");
+	myBlinker.change(LEDBlinker::blue, 300, 2700, 16384);
 }
 
 void
 ApplicationManager::bleClientDetached()
 {
 	vm_log_info("client detached; starting up now");
+	myBlinker.change(LEDBlinker::white, 500, 500, 4);
 
 	activate();
 }
@@ -261,5 +248,5 @@ ApplicationManager::activate()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	vm_timer_create_non_precise(3000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	vm_timer_create_non_precise(4000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
 }

@@ -60,10 +60,11 @@ void myWriteHook(const long value)
 	bar = value;
 }
 
-// give services short name and store in container for retrieval in gatt
+// PersistentGATTByte and PersistentGATT need common ancestor; hash that into a map for retrieval from
+// ConfigurationManager.  Create a singleton for ConfigurationManager and allow static objects to
+// register a callback for BLE services/characteristics which need/should stay in other objects.
+// iterate over that list while building locally defined services
 // add listener list for updates from gatt
-// each class that wants to must implement a ::registerGATT() method; they can be called in
-// any order after ConfigurationManager ctor is created and the server is initialized
 
 // name and UUID to come from eeprom; default UUID to some permutation off of EEID or something else unique
 // defer initialization of gatt until after eeprom subsystem active
@@ -131,69 +132,6 @@ ConfigurationManager::bindConnectionListener(std::function<void()> connect, std:
 void
 ConfigurationManager::buildServices(void)
 {
-//#define NOPE
-#ifdef NOPE
-	Service *myService = new gatt::Service(my_service, true);
-	Service *myOtherService = new gatt::Service(my_other_service, true);
-
-	ByteHookCharacteristic<long> *myChar = NULL;
-	ByteCharacteristic<long> *c2 = NULL;
-	ByteCharacteristic<long> *s2c1 = NULL;
-	ByteCharacteristic<long> *s2c2 = NULL;
-
-	StringCharacteristic *s2c3 = NULL;
-	StringHookCharacteristic *s2c4 = NULL;
-	StringCharacteristic *s2c5 = NULL;
-	myChar = new ByteHookCharacteristic<long>(my_char,
-			VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-			VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ);
-	std::function<const long()> myReadhook = [&] () { return myReadHook();};
-	std::function<void(const long value)> myWritehook = [&] (const long value) { myWriteHook(value); };
-	myChar->setReadHook(myReadhook);
-	myChar->setWriteHook(myWritehook);
-	myService->addCharacteristic(myChar);
-	c2 = new ByteCharacteristic<long>(my_c2,
-			VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-			VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, &myValue);
-	myValue = 42;
-	myService->addCharacteristic(c2);
-
-	s2c1 = new ByteCharacteristic<long>(my_s2c1,
-			VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-			VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ);
-	s2c1->setValue(4);
-	myOtherService->addCharacteristic(s2c1);
-
-	s2c2 = new ByteCharacteristic<long>(my_s2c2,
-			VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-			VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ);
-	s2c2->setValue(5);
-	myOtherService->addCharacteristic(s2c2);
-
-	s2c3 = new StringCharacteristic(my_s2c3,
-			VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-			VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ);
-	s2c3->setValue("do re me!");
-	myOtherService->addCharacteristic(s2c3);
-
-	s2c4 = new StringHookCharacteristic(my_s2c4,
-			VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-			VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ);
-	myOtherService->addCharacteristic(s2c4);
-	std::function<void(const char *str, const unsigned len)> bleRename = [&] (const char *str, const long len) { return updateBLEName(str, len); };
-	s2c4->setWriteHook(bleRename);
-
-	s2c5 = new StringCharacteristic(my_s2c5,
-			VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-			VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ);
-	s2c5->setValue("anybody out there");
-	myOtherService->addCharacteristic(s2c5);
-
-
-	_gatt->addService(myOtherService);
-	_gatt->addService(myService);
-#endif
-
 	{
 		Service *networking = new gatt::Service(gsm_service, true);
 
@@ -201,8 +139,11 @@ ConfigurationManager::buildServices(void)
 		networking->addCharacteristic(&ApplicationManager::_proxyIP._ble);
 		networking->addCharacteristic(&_proxyPort._ble);
 		_gatt->addService(networking);
+	}
 
+	{
 		Service *mqtt = new gatt::Service(mqtt_service, true);
+
 		mqtt->addCharacteristic(&ApplicationManager::_aioServer._ble);
 		mqtt->addCharacteristic(&ApplicationManager::_aioUsername._ble);
 		mqtt->addCharacteristic(&ApplicationManager::_aioKey._ble);

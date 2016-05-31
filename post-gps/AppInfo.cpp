@@ -123,3 +123,15 @@ AppInfo::getMaxMem()
 
 	return _maxMem;
 }
+
+extern "C"
+unsigned long vm_pmng_get_total_heap_size();
+
+const unsigned long
+AppInfo::getHeapSize()
+{
+	unsigned long size = vm_pmng_get_total_heap_size();
+
+	vm_log_info("heap size %d", size);
+	return size;
+}

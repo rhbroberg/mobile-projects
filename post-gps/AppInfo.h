@@ -16,6 +16,7 @@ public:
 	const VMUINT getPatchlevel();
 	const VMCSTR getFirmware();
 	const unsigned long getMaxMem();
+	const unsigned long getHeapSize();
 
 protected:
   VMSTR _name;
