@@ -20,8 +20,7 @@ public:
 	void disableBLE();
 	const bool active() const;
 
-	void addService(const char *serviceName, gatt::Service *);
-	void addCharacteristic(const char *serviceName, gatt::Characteristic *);
+	void addService(gatt::Service *);
 	void bindConnectionListener(std::function<void()> connect, std::function<void()> disconnect);
 
 protected:
@@ -30,8 +29,6 @@ protected:
 
 	eeprom::Manager *_eeprom;
 	bool _isActive;
-// temporary hack - not permanent
-public:
 	gatt::Server *_gatt;
 
 public:

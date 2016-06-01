@@ -47,6 +47,7 @@ ApplicationManager::cellChanged()
 {
 	_blinker.change(LEDBlinker::blue, 750, 500, 3, true);
 	_network.simStatus();
+	_network.updateCellLocation();
 }
 
 void
@@ -222,7 +223,7 @@ ApplicationManager::start()
 	// allow bluetooth bootstrapping configuration
 	_config.start();  // have to split starting eeprom from ble, else ble can't retrieve server name.  currently coupled
 	_config.mapEEPROM();
-	_network.registerGATT(_config._gatt);
+	_network.registerGATT(_config);
 	_config.enableBLE();
 	std::function<void()> attachHook = [&] () { bleClientAttached();};
 	std::function<void()> detachHook = [&] () { bleClientDetached(); activate(); };

@@ -110,15 +110,9 @@ ConfigurationManager::active() const
 }
 
 void
-ConfigurationManager::addService(const char *serviceName, gatt::Service *)
+ConfigurationManager::addService(gatt::Service *service)
 {
-
-}
-
-void
-ConfigurationManager::addCharacteristic(const char *serviceName, gatt::Characteristic *)
-{
-
+	_gatt->addService(service);
 }
 
 void

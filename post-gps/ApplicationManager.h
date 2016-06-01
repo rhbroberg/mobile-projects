@@ -1,5 +1,4 @@
-#ifndef ApplicationManager_h
-#define ApplicationManager_h
+#pragma once
 
 #include <functional>
 #include "GPSHelper.h"
@@ -12,6 +11,9 @@
 #include "PersistentGATTByte.h"
 #include "LEDBlinker.h"
 #include "vmwdt.h"
+
+namespace gpstracker
+{
 
 class ApplicationManager
 {
@@ -65,5 +67,4 @@ public:
 	static gpstracker::PersistentGATTByte _aioUsername;
 	static gpstracker::PersistentGATTByte _aioKey;
 };
-
-#endif //  ApplicationManager_h
+}

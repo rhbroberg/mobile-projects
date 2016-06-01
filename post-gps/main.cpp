@@ -23,11 +23,12 @@
 #include "vmgsm.h"
 #include "vmbt_cm.h"
 
+#include "ApplicationManager.h"
+
 #include "AppInfo.h"
 AppInfo _applicationInfo;
 
-#include "ApplicationManager.h"
-ApplicationManager appmgr;
+gpstracker::ApplicationManager appmgr;
 
 const bool
 showBatteryStats()

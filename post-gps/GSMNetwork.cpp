@@ -6,11 +6,15 @@
 #include "ObjectCallbacks.h"
 #include "vmstdlib.h"
 #include "UUIDs.h"
+#include "ConfigurationManager.h"
+#include "gatt/ByteHookCharacteristic.h"
 
 #include "vmgsm_cell.h"
 #include "vmgsm_gprs.h"
 #include "vmgsm_sim.h"
 #include "vmgsm_sms.h"
+
+using namespace gpstracker;
 
 GSMNetwork::GSMNetwork()
   : _isEnabled(false)
@@ -134,25 +138,90 @@ GSMNetwork::resolveHost(VMSTR host, std::function<void (char *)> callback)
 	}
 }
 
-void
-GSMNetwork::registerGATT(gatt::Server *server)
+const unsigned int
+GSMNetwork::queryCellInfo(const towerAttributes which)
 {
-	gatt::Service *_simService = new gatt::Service(sim_service, true);
+	vm_log_info("queryCellInfo hook: %d", which);
+	vm_gsm_cell_info_t info; /* cell information data */
+	vm_gsm_cell_get_current_cell_info(&info);
 
-	// these could use a readHook instead...
-	_simIMSI = new gatt::StringCharacteristic(simIMSI_uuid,
-		VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
-	_simService->addCharacteristic(_simIMSI);
+	switch (which)
+	{
+	case arfcn:
+		return info.arfcn;
+		break;
+	case bsic:
+		return info.bsic;
+		break;
+	case rxlev:
+		return info.rxlev;
+		break;
+	}
+}
 
-	_simIMEI = new gatt::StringCharacteristic(simIMEI_uuid,
-		VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
-	_simService->addCharacteristic(_simIMEI);
+void
+GSMNetwork::updateCellLocation()
+{
+	vm_gsm_cell_info_t info; /* cell information data */
+	vm_gsm_cell_get_current_cell_info(&info);
 
-	_simICCI = new gatt::StringCharacteristic(simICCI_uuid,
-		VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, NULL, sizeof(_iccid));
-	_simService->addCharacteristic(_simICCI);
+	sprintf((VMSTR)_towerLocation, (VMCSTR)"%d;%d;%d;%d", info.mcc, info.mnc, info.lac, info.ci);
+	// perhaps a BLE notification is sent in this instance?
+}
 
-	server->addService(_simService);
+void
+GSMNetwork::registerGATT(ConfigurationManager &configMgr)
+{
+	{
+		gatt::Service *_simService = new gatt::Service(sim_service, true);
+
+		// these could use a readHook instead...
+		_simIMSI = new gatt::StringCharacteristic(simIMSI_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
+		_simService->addCharacteristic(_simIMSI);
+
+		_simIMEI = new gatt::StringCharacteristic(simIMEI_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
+		_simService->addCharacteristic(_simIMEI);
+
+		_simICCI = new gatt::StringCharacteristic(simICCI_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, NULL, sizeof(_iccid));
+		_simService->addCharacteristic(_simICCI);
+
+		configMgr.addService(_simService);
+	}
+
+	{
+		gatt::Service *_cellService = new gatt::Service(cell_service, true);
+
+		gatt::ByteHookCharacteristic<unsigned int> *arfcn = new gatt::ByteHookCharacteristic<unsigned int>(arfcn_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
+		std::function<const long()> arfcnReadHook = [&] () { return queryCellInfo(towerAttributes::arfcn);};
+		arfcn->setReadHook(arfcnReadHook);
+		_cellService->addCharacteristic(arfcn);
+
+		gatt::ByteHookCharacteristic<unsigned short> *bsic = new gatt::ByteHookCharacteristic<unsigned short>(bsic_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
+		std::function<const long()> bsicReadHook = [&] () { return queryCellInfo(towerAttributes::bsic);};
+		bsic->setReadHook(bsicReadHook);
+		_cellService->addCharacteristic(bsic);
+
+		gatt::ByteHookCharacteristic<unsigned short> *rxlevel = new gatt::ByteHookCharacteristic<unsigned short>(rxlev_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
+		std::function<const long()> rxlevReadHook = [&] () { return queryCellInfo(towerAttributes::rxlev);};
+		rxlevel->setReadHook(rxlevReadHook);
+		_cellService->addCharacteristic(rxlevel);
+
+		// this characteristic doesn't change unless we get a signal from
+		// the framework that the cell has changed.  so it should read from a fixed string which
+		// is updated by that call
+		gatt::StringCharacteristic *towerId = new gatt::StringCharacteristic(towerId_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, _towerLocation);
+		_cellService->addCharacteristic(towerId);
+
+		configMgr.addService(_cellService);
+	}
+
 }
 
 const bool
@@ -204,8 +273,13 @@ GSMNetwork::simStatus()
 	vm_log_info("sms is ready %d\n", smsReady);
 
 	vm_gsm_cell_get_current_cell_info(&info);
+	// why is this useful?  look here
+	// http://cellidfinder.com/articles/how-to-find-cellid-location-with-mcc-mnc-lac-i-cellid-cid
+	// http://cellidfinder.com
+	// http://openbmap.org/api/openbmap_api.php5
+	// offline and online maps!
 	vm_log_info(
-			"ar=%d, bsic=%d, rxlev=%d, mcc=%d, mnc=%d, lac=%d, ci=%d", info.arfcn, info.bsic, info.rxlev, info.mcc, info.mnc, info.lac, info.ci);
+			"arfcn=%d, bsic=%d, rxlev=%d, mcc=%d, mnc=%d, lac=%d, ci=%d", info.arfcn, info.bsic, info.rxlev, info.mcc, info.mnc, info.lac, info.ci);
 
 	if (cardPresent == VM_TRUE)
 	{

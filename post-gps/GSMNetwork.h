@@ -1,5 +1,4 @@
-#ifndef GSMNetwork_h
-#define GSMNetwork_h
+#pragma once
 
 #include "vmbearer.h"
 #include <functional>
@@ -7,6 +6,11 @@
 #include "GATT/StringCharacteristic.h"
 #include "GATT/Service.h"
 #include "GATT/Server.h"
+
+namespace gpstracker
+{
+
+class ConfigurationManager;
 
 class GSMNetwork
 {
@@ -19,9 +23,12 @@ public:
 	void resolveHost(VMSTR host, std::function<void (char *)> callback);
 	const int simStatus();
 	const bool simInfo();
-	void registerGATT(gatt::Server *);
+	void registerGATT(ConfigurationManager &);
+	void updateCellLocation();
 
 protected:
+	enum towerAttributes {arfcn, bsic, rxlev, location};
+	const unsigned int queryCellInfo(const towerAttributes which);
 	void retrievedICCI();
 	VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result);
 	void bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event,
@@ -44,10 +51,10 @@ protected:
 	VMCHAR _iccid[24];
 	VMCSTR _imsi;
 	VMCSTR _imei;
+	char _towerLocation[32];
 
 	gatt::StringCharacteristic *_simIMSI;
 	gatt::StringCharacteristic *_simIMEI;
 	gatt::StringCharacteristic *_simICCI;
 };
-
-#endif // GSMNetwork_h
+}
