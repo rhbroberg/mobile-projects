@@ -197,7 +197,7 @@ ApplicationManager::enableBLE()
 	if (!_config.active())
 	{
 		std::function<void()> attachHook = [&] () { bleClientAttached();};
-		std::function<void()> detachHook = [&] () { bleClientDetached();};
+		std::function<void()> detachHook = [&] () { _config.disableBLE(); bleClientDetached();};
 
 		_config.bindConnectionListener(attachHook, detachHook);
 		_config.enableBLE();
