@@ -21,21 +21,13 @@
 #include "vmchset.h"
 #include "vmkeypad.h"
 #include "vmgsm.h"
-
 #include "vmbt_cm.h"
 
 #include "AppInfo.h"
 AppInfo _applicationInfo;
 
-
 #include "ApplicationManager.h"
 ApplicationManager appmgr;
-
-#include "LEDBlinker.h"
-LEDBlinker myBlinker;
-
-#include "vmwdt.h"
-VM_WDT_HANDLE _watchdog = -1;
 
 const bool
 showBatteryStats()
@@ -50,10 +42,10 @@ showBatteryStats()
 void ledtest(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_log_debug("ledtest");
-	myBlinker.change(LEDBlinker::green, 300, 300, 10);
+	appmgr._blinker.change(LEDBlinker::green, 300, 300, 10);
 	// delay(10000);
 	vm_log_debug("another test");
-	myBlinker.change(LEDBlinker::blue, 100, 500, 10);
+	appmgr._blinker.change(LEDBlinker::blue, 100, 500, 10);
 }
 
 void
@@ -85,16 +77,16 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 			// up
 			vm_log_debug("key is released\n");
 
-			//myBlinker.start();
-		    appmgr.start();
+			//appmgr._blinker.start();
+		    appmgr.enableBLE();
 #ifdef TESTME
 			if (showBatteryStats())
 			{
-				myBlinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
+				appmgr._blinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
 			}
 			else
 			{
-				myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
+				appmgr._blinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
 			}
 
 			static int onoff = 1;
@@ -111,7 +103,7 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
-	myBlinker.start();
+	appmgr._blinker.start();
 
 	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
 			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
@@ -125,18 +117,12 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 
 	if (showBatteryStats())
 	{
-		myBlinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
+		appmgr._blinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
 	}
 	else
 	{
-		myBlinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
+		appmgr._blinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
 	}
-
-//#define DO_HE_BITE
-#ifdef DO_HE_BITE
-	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
-#endif
-	vm_log_info("watchdog id is %d", _watchdog);
 
     appmgr.start();
 }
@@ -163,7 +149,7 @@ void handle_sysevt(VMINT message, VMINT param)
 		vm_log_info("battery level critical");
 		// this really needs to go into a separate special logfile
 		// (void) _dataJournal.write((VMCSTR) "battery level critical");
-		myBlinker.change(LEDBlinker::red, 100, 100, 20, true);
+		appmgr._blinker.change(LEDBlinker::red, 100, 100, 20, true);
 		break;
 
 	case VM_EVENT_QUIT:

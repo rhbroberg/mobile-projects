@@ -5,6 +5,7 @@
 #include "vmlog.h"
 #include "ObjectCallbacks.h"
 #include "vmstdlib.h"
+#include "UUIDs.h"
 
 #include "vmgsm_cell.h"
 #include "vmgsm_gprs.h"
@@ -13,9 +14,14 @@
 
 GSMNetwork::GSMNetwork()
   : _isEnabled(false)
+  , _simIMSI(NULL)
+  , _simIMEI(NULL)
+  , _simICCI(NULL)
 {
+	memset(_iccid, 0, sizeof(_iccid));
 	_bearerCallbackPtr = [&] (VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id) { bearerCallback(handle, event, data_account_id); };
 	_dnsCallbackPtr = [&] (VM_DNS_HANDLE handle, vm_dns_result_t *result) { return dnsCallback(handle, result); };
+	_icciCallbackPtr = [&] (void) { retrievedICCI(); };
 }
 
 void GSMNetwork::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, VMUINT data_account_id)
@@ -128,43 +134,92 @@ GSMNetwork::resolveHost(VMSTR host, std::function<void (char *)> callback)
 	}
 }
 
-// make code above block on status before it starts
+void
+GSMNetwork::registerGATT(gatt::Server *server)
+{
+	gatt::Service *_simService = new gatt::Service(sim_service, true);
+
+	// these could use a readHook instead...
+	_simIMSI = new gatt::StringCharacteristic(simIMSI_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
+	_simService->addCharacteristic(_simIMSI);
+
+	_simIMEI = new gatt::StringCharacteristic(simIMEI_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ);
+	_simService->addCharacteristic(_simIMEI);
+
+	_simICCI = new gatt::StringCharacteristic(simICCI_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, NULL, sizeof(_iccid));
+	_simService->addCharacteristic(_simICCI);
+
+	server->addService(_simService);
+}
+
+const bool
+GSMNetwork::simInfo()
+{
+	VMBOOL has = vm_gsm_sim_has_card();
+
+	if (has)
+	{
+		VM_GSM_SIM_ID id = vm_gsm_sim_get_active_sim_card();
+		_imsi = (VMSTR) vm_gsm_sim_get_imsi(id);
+		_imei = (VMSTR) vm_gsm_sim_get_imei(id);
+		VM_GSM_SIM_STATUS status = vm_gsm_sim_get_card_status(id);
+		vm_log_info("sim status = %d for card %d", (char*)status, id);
+
+		// if StringCharacteristic took a pointer outside of construction time, this would be a good place to use it to avoid a copy
+		_simIMSI->setValue((const char *)_imsi);
+		_simIMEI->setValue((const char *)_imei);
+
+		if (_iccid[0] == 0)
+		{
+			vm_log_info("retrieving iccid first time");
+			VM_RESULT cbstatus = vm_gsm_sim_get_iccid_with_sim(id, ObjectCallbacks::icciRetrieve,
+					(VMSTR)_iccid, sizeof(_iccid) - 1, (void *) & _icciCallbackPtr);
+		}
+	}
+
+	return has;
+}
+
+void
+GSMNetwork::retrievedICCI()
+{
+	vm_log_info("icci now retrieved: %s", _iccid);
+	_simICCI->setValue((const char *)_iccid);
+}
+
+// make 'enable' code above block on status before it starts
 const int
 GSMNetwork::simStatus()
 {
 	vm_gsm_cell_info_t info; /* cell information data */
-	VM_GSM_SIM_STATUS status;
-	VMSTR imsi = NULL;
-	VMSTR imei = NULL;
-
-	// fix: retrieve iccid
-
-	/* Opens the cell when receiving AT command: AT+[1000]Test01 */
 	VMINT result = vm_gsm_cell_open();
+	// need to call vm_gsm_cell_close() ?
 	vm_log_info("open result = %d", result);
-	VMBOOL has = vm_gsm_sim_has_card();
-	VM_GSM_SIM_ID id = vm_gsm_sim_get_active_sim_card();
-	imsi = (VMSTR) vm_gsm_sim_get_imsi(id);
-	imei = (VMSTR) vm_gsm_sim_get_imei(id);
-	status = vm_gsm_sim_get_card_status(id);
+	VMBOOL cardPresent = simInfo();
+
 	VMBOOL smsReady = vm_gsm_sms_is_sms_ready();
-	vm_log_info("active sim id = %d, sms is ready %d\n", id, smsReady);
+	vm_log_info("sms is ready %d\n", smsReady);
 
 	vm_gsm_cell_get_current_cell_info(&info);
 	vm_log_info(
 			"ar=%d, bsic=%d, rxlev=%d, mcc=%d, mnc=%d, lac=%d, ci=%d", info.arfcn, info.bsic, info.rxlev, info.mcc, info.mnc, info.lac, info.ci);
 
-	if ((has == VM_TRUE) || true)
+	if (cardPresent == VM_TRUE)
 	{
-		if (imsi != NULL)
+		if (_imsi != NULL)
 		{
-			vm_log_info("sim imsi = %s", (char*)imsi);
-			vm_log_info("imei = %s", (char*)imei);
-			vm_log_info("sim status = %d", (char*)status);
+			vm_log_info("sim imsi = %s", (char*)_imsi);
+		}
+		if (_imei != NULL)
+		{
+			vm_log_info("imei = %s", (char*)_imei);
 		}
 		else
 		{
-			vm_log_info("query sim imsi fail\n");
+			vm_log_info("query sim imei fail\n");
 		}
 	}
 	else

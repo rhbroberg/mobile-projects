@@ -8,28 +8,21 @@
 #include "vmgsm_gprs.h"
 #include "vmpwr.h"
 #include "ObjectCallbacks.h"
-
 #include "LGPS.h"
-#include "LEDBlinker.h"
-extern LEDBlinker myBlinker;
-
-#include "vmwdt.h"
-extern VM_WDT_HANDLE _watchdog;
-
+#include "PersistentGATT.h"
 #include "PersistentGATTByte.h"
 #include "UUIDs.h"
 
 using namespace gpstracker;
 
-#define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define USING_PROXY VM_FALSE
-#define PROXY_PORT  80
+extern PersistentGATT<unsigned long> _proxyPort;
+extern PersistentGATT<unsigned long> _mqttPort;
+extern PersistentGATT<unsigned long> _gpsDelay;
 
 // #include HTTPSSender.h
 #include "vmhttps.h"
 void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data);
 
-// needs _watchdog, _portal, _blinker
 ApplicationManager::ApplicationManager()
   : _publishFailures(0)
   , _journalName("mylog.txt")
@@ -39,6 +32,7 @@ ApplicationManager::ApplicationManager()
   , _hostIP(NULL)
   , _networkIsReady(false)
   , _bleTimeout(0)
+  , _watchdog(-1)
 {
 //	_logitPtr = [&] (void) { return go(); };
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
@@ -51,7 +45,7 @@ ApplicationManager::ApplicationManager()
 void
 ApplicationManager::cellChanged()
 {
-	myBlinker.change(LEDBlinker::blue, 750, 500, 3, true);
+	_blinker.change(LEDBlinker::blue, 750, 500, 3, true);
 	_network.simStatus();
 }
 
@@ -61,7 +55,7 @@ ApplicationManager::archiveEntry()
 	vm_log_info("portal not ready yet; archiving data");
 	if (_dataJournal.isValid())
 	{
-		myBlinker.change(LEDBlinker::blueGreen, 100, 200, 2);
+		_blinker.change(LEDBlinker::blueGreen, 100, 200, 2);
 		VM_RESULT result = _dataJournal.write(_locationStatus);
 
 		if (result < 0)
@@ -71,7 +65,7 @@ ApplicationManager::archiveEntry()
 	}
 	else
 	{
-		myBlinker.change(LEDBlinker::red, 100, 200, 2);
+		_blinker.change(LEDBlinker::red, 100, 200, 2);
 	}
 }
 
@@ -82,12 +76,12 @@ ApplicationManager::postEntry()
 	if (_portal->publish(_locationTopic, _locationStatus))
 	{
 		vm_log_info("publish succeeded");
-		myBlinker.change(LEDBlinker::green, 200);
+		_blinker.change(LEDBlinker::green, 200);
 	}
 	else
 	{
 		vm_log_info("publish failed");
-		myBlinker.change(LEDBlinker::red, 100, 150, 1);
+		_blinker.change(LEDBlinker::red, 100, 150, 1);
 
 		if (_publishFailures++ > 3)
 		{
@@ -130,7 +124,7 @@ ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 	else
 	{
 		// gps data not ready
-		myBlinker.change(LEDBlinker::red, 100, 150, 3);
+		_blinker.change(LEDBlinker::red, 100, 150, 3);
 	}
 }
 
@@ -165,7 +159,7 @@ ApplicationManager::mqttInit()
 {
 	vm_log_debug("using native adafruit connection to connect to %s", _hostIP);
 
-	_portal = new MQTTnative(_hostIP,(const char *) _aioUsername.getString(), (const char *)_aioKey.getString(), AIO_SERVERPORT);
+	_portal = new MQTTnative(_hostIP,(const char *) _aioUsername.getString(), (const char *)_aioKey.getString(), _mqttPort.getValue());
 	_portal->setTimeout(15001);
 	_locationTopic = _portal->topicHandle("l");
 	// contains calls which must be made using LTask-like facility (use std::functional) else random disconnections
@@ -173,7 +167,7 @@ ApplicationManager::mqttInit()
 	_portal->start();
 	_networkIsReady = true;
 
-	myBlinker.change(LEDBlinker::white, 100, 100, 5, true);
+	_blinker.change(LEDBlinker::white, 100, 100, 5, true);
 }
 
 #include "vmfirmware.h"
@@ -186,27 +180,52 @@ ApplicationManager::bleClientAttached()
 	_bleTimeout = 0;
 
 	vm_log_info("client attached for configuration; waiting for disconnect");
-	myBlinker.change(LEDBlinker::blue, 300, 2700, 16384);
+	_blinker.change(LEDBlinker::blue, 300, 2700, 16384);
 }
 
 void
 ApplicationManager::bleClientDetached()
 {
-	vm_log_info("client detached; starting up now");
-	myBlinker.change(LEDBlinker::white, 500, 500, 4);
+	vm_log_info("client detached");
+	_blinker.change(LEDBlinker::white, 500, 500, 4);
+}
 
-	activate();
+void
+ApplicationManager::enableBLE()
+{
+	// this is currently incomplete; all the BLE objects must be re-sent to the BLE hardware after its power cycle
+	if (!_config.active())
+	{
+		std::function<void()> attachHook = [&] () { bleClientAttached();};
+		std::function<void()> detachHook = [&] () { bleClientDetached();};
+
+		_config.bindConnectionListener(attachHook, detachHook);
+		_config.enableBLE();
+
+		_configTimeout = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { _config.disableBLE(); };
+		_bleTimeout = vm_timer_create_non_precise(30000, ObjectCallbacks::timerNonPrecise, &_configTimeout);
+	}
 }
 
 void
 ApplicationManager::start()
 {
+//#define DO_HE_BITE  // as of 2016-05 2502 firmware fails after a fixed number of watchdog resets, so behavior is broken
+#ifdef DO_HE_BITE
+	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
+	vm_log_info("watchdog id is %d", _watchdog);
+#endif
+	vm_log_info("starting up application");
+	// must retrieve status at least once for gatt characteristics to be valid;
+	_network.simStatus();
+
 	// allow bluetooth bootstrapping configuration
-	_config.start();
-	_config.enableBLE();
+	_config.start();  // have to split starting eeprom from ble, else ble can't retrieve server name.  currently coupled
 	_config.mapEEPROM();
+	_network.registerGATT(_config._gatt);
+	_config.enableBLE();
 	std::function<void()> attachHook = [&] () { bleClientAttached();};
-	std::function<void()> detachHook = [&] () { bleClientDetached();};
+	std::function<void()> detachHook = [&] () { bleClientDetached(); activate(); };
 
 	_config.bindConnectionListener(attachHook, detachHook);
 
@@ -226,16 +245,18 @@ ApplicationManager::activate()
 	_config.disableBLE();
 	//#define USE_HTTP
 #ifdef USE_HTTP
-	myBlinker.change(LEDBlinker::white, 3000, 3000, 1024);
+	_blinker.change(LEDBlinker::white, 3000, 3000, 1024);
 	//	  vm_timer_create_non_precise(60000, ledtest, NULL);
 	vm_timer_create_non_precise(60000, myHttpSend, NULL);
 
 #else
-	_network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), USING_PROXY, PROXY_PORT);
+	_network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
 #endif
 
 	VM_RESULT openStatus;
-	// fix: make sure to set time from gps before opening the log, otherwise rotation won't work
+
+	// even if gps hasn't acquired/set RTC, logfile will be updated with correct timestamp
+	// once the first write occurs
 	if (openStatus = _dataJournal.open() < 0)
 	{
 		vm_log_info("open of data journal '%s' failed: %d", _journalName, openStatus);
@@ -248,5 +269,5 @@ ApplicationManager::activate()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	vm_timer_create_non_precise(4000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
 }

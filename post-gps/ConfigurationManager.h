@@ -15,10 +15,10 @@ public:
 	ConfigurationManager();
 
 	void start();
-
 	void mapEEPROM();
 	void enableBLE();
 	void disableBLE();
+	const bool active() const;
 
 	void addService(const char *serviceName, gatt::Service *);
 	void addCharacteristic(const char *serviceName, gatt::Characteristic *);
@@ -29,6 +29,9 @@ protected:
 	void buildServices();
 
 	eeprom::Manager *_eeprom;
+	bool _isActive;
+// temporary hack - not permanent
+public:
 	gatt::Server *_gatt;
 
 public:

@@ -79,6 +79,11 @@ ObjectCallbacks::timerHISR(void* method)
 	(*((std::function<void (void)> *)(method)))();
 }
 
+void
+ObjectCallbacks::icciRetrieve(VMCHAR *iccid, void *method)
+{
+	(*((std::function<void (void)> *)(method)))();
+}
 
 #ifdef NOPE
 void

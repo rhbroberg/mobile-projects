@@ -40,25 +40,11 @@ PersistentGATTByte ApplicationManager::_aioKey("mqtt.aio.key", 41, aioKey_uuid,
 		VM_BT_GATT_PERMISSION_WRITE);
 PersistentGATT<unsigned long> _mqttPort("mqtt.aio.port", aioPort_uuid,
 		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
-		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 1883);
+		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 1883);  // use 8883 for SSL
 
-long myValue;
-
-const long myReadHook()
-{
-	static long foo = 13;
-
-	vm_log_info("in the readhook");
-	return foo++;
-}
-
-void myWriteHook(const long value)
-{
-	static long bar = 0;
-
-	vm_log_info("in the writehook writing %d", value);
-	bar = value;
-}
+PersistentGATT<unsigned long> _gpsDelay("gps.delay", gpsDelay_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
+		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 4000);
 
 // PersistentGATTByte and PersistentGATT need common ancestor; hash that into a map for retrieval from
 // ConfigurationManager.  Create a singleton for ConfigurationManager and allow static objects to
@@ -71,6 +57,7 @@ void myWriteHook(const long value)
 ConfigurationManager::ConfigurationManager()
  : _gatt(NULL)
  , _eeprom(NULL)
+ , _isActive(false)
 {
 
 }
@@ -99,16 +86,27 @@ ConfigurationManager::start()
 void
 ConfigurationManager::enableBLE()
 {
-	_gatt->enable();
+	if (!_isActive)
+	{
+		_gatt->enable();
+	}
+	_isActive = true;
 }
 
 void
 ConfigurationManager::disableBLE()
 {
-	// _gatt->disable();
-	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());
-	vm_bt_cm_switch_off();
-	vm_log_info("bluetooth power status after switching off :%d", vm_bt_cm_get_power_status());
+	if (_isActive)
+	{
+		_gatt->disable();
+	}
+	_isActive = false;
+}
+
+const bool
+ConfigurationManager::active() const
+{
+	return _isActive;
 }
 
 void
@@ -130,7 +128,7 @@ ConfigurationManager::bindConnectionListener(std::function<void()> connect, std:
 }
 
 void
-ConfigurationManager::buildServices(void)
+ConfigurationManager::buildServices()
 {
 	{
 		Service *networking = new gatt::Service(gsm_service, true);
@@ -149,6 +147,13 @@ ConfigurationManager::buildServices(void)
 		mqtt->addCharacteristic(&ApplicationManager::_aioKey._ble);
 		mqtt->addCharacteristic(&_mqttPort._ble);
 		_gatt->addService(mqtt);
+	}
+
+	{
+		Service *post = new gatt::Service(post_service, true);
+
+		post->addCharacteristic(&_gpsDelay._ble);
+		_gatt->addService(post);
 	}
 }
 
@@ -170,6 +175,7 @@ ConfigurationManager::mapEEPROM()
 	_eeprom->add(&ApplicationManager::_aioKey);
 	_eeprom->add(&_proxyPort);
 	_eeprom->add(&_mqttPort);
+	_eeprom->add(&_gpsDelay);
 
     _eeprom->start();
 	vm_log_info("read back %s and %d, %d", _frist.getString(), _second.getValue(), _third.getValue());
