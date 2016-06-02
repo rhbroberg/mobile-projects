@@ -135,3 +135,5 @@ AppInfo::getHeapSize()
 	vm_log_info("heap size %d", size);
 	return size;
 }
+
+// put name, firmware, application-version into gatt configuration
