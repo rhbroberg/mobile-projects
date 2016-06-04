@@ -25,9 +25,6 @@
 
 #include "ApplicationManager.h"
 
-#include "AppInfo.h"
-AppInfo _applicationInfo;
-
 gpstracker::ApplicationManager appmgr;
 
 const bool
@@ -105,10 +102,6 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
 	appmgr._blinker.start();
-
-	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
-			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
-	vm_log_info("resources: firmware '%s', max memory %d", _applicationInfo.getFirmware(), _applicationInfo.getMaxMem());
 
 #ifdef NOPE
 	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());

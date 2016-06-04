@@ -1,11 +1,18 @@
 #include "AppInfo.h"
-#include <string.h>
 #include <stdlib.h>
 #include "vmtag.h"
+#include "vmstdlib.h"
 #include "vmmemory.h"
 #include "vmchset.h"
 #include "vmlog.h"
 #include "vmfirmware.h"
+#include "ConfigurationManager.h"
+#include "gatt/StringCharacteristic.h"
+#include "gatt/ByteCharacteristic.h"
+#include "gatt/Service.h"
+#include "UUIDs.h"
+
+using namespace gpstracker;
 
 AppInfo::AppInfo()
  : _version(0)
@@ -20,7 +27,7 @@ AppInfo::~AppInfo()
 	delete _name;
 }
 
-const VMUINT
+const VMCSTR
 AppInfo::getVersion()
 {
 	if (! _version)
@@ -35,12 +42,11 @@ AppInfo::getVersion()
 				&_version,
 				&reqSize)))
 		{
-			vm_log_info(
-					"version=%d.%d.%d", (_version >> 8) & 0xFF, (_version >> 16) & 0xFF, (_version >> 24) & 0xFF);
+			sprintf(_versionStr, (VMCSTR)"%d.%d.%d", (_version >> 8) & 0xFF, (_version >> 16) & 0xFF, (_version >> 24) & 0xFF);
 		}
 	}
 
-	return _version;
+	return _versionStr;
 }
 
 const VMUINT
@@ -124,8 +130,7 @@ AppInfo::getMaxMem()
 	return _maxMem;
 }
 
-extern "C"
-unsigned long vm_pmng_get_total_heap_size();
+extern "C" unsigned long vm_pmng_get_total_heap_size();
 
 const unsigned long
 AppInfo::getHeapSize()
@@ -136,4 +141,24 @@ AppInfo::getHeapSize()
 	return size;
 }
 
-// put name, firmware, application-version into gatt configuration
+void
+AppInfo::registerGATT(ConfigurationManager &configMgr)
+{
+	{
+		gatt::Service *_versionService = new gatt::Service(sim_service, true);
+
+		gatt::StringCharacteristic *name = new gatt::StringCharacteristic(name_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, (char *)_name);
+		_versionService->addCharacteristic(name);
+
+		gatt::StringCharacteristic *version = new gatt::StringCharacteristic(version_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, (char *)_versionStr);
+		_versionService->addCharacteristic(version);
+
+		gatt::StringCharacteristic *firmware = new gatt::StringCharacteristic(firmware_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, (char *)_firmware);
+		_versionService->addCharacteristic(firmware);
+
+		configMgr.addService(_versionService);
+	}
+}

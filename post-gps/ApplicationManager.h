@@ -10,6 +10,7 @@
 #include "ConfigurationManager.h"
 #include "PersistentGATTByte.h"
 #include "LEDBlinker.h"
+#include "AppInfo.h"
 #include "vmwdt.h"
 
 namespace gpstracker
@@ -35,6 +36,7 @@ protected:
 	void postEntry();
 	void archiveEntry();
 
+	AppInfo _applicationInfo;
 	GPSHelper _gps;
 	MQTTnative *_portal;
 	void *_locationTopic;

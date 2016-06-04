@@ -12,6 +12,7 @@
 #include "PersistentGATT.h"
 #include "PersistentGATTByte.h"
 #include "UUIDs.h"
+#include "AppInfo.h"
 
 using namespace gpstracker;
 
@@ -40,6 +41,10 @@ ApplicationManager::ApplicationManager()
 	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
 	_resolvedPtr = [&] (char *host) { _hostIP = host; mqttInit(); };
 	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) _aioServer.getString(), _resolvedPtr); };
+
+	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
+			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
+	vm_log_info("resources: firmware '%s', max memory %d", _applicationInfo.getFirmware(), _applicationInfo.getMaxMem());
 }
 
 void
@@ -94,9 +99,6 @@ ApplicationManager::postEntry()
 		}
 	}
 }
-
-#include "AppInfo.h"
-extern AppInfo _applicationInfo;
 
 void
 ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
@@ -224,6 +226,7 @@ ApplicationManager::start()
 	_config.start();  // have to split starting eeprom from ble, else ble can't retrieve server name.  currently coupled
 	_config.mapEEPROM();
 	_network.registerGATT(_config);
+	_applicationInfo.registerGATT(_config);
 	_config.enableBLE();
 	std::function<void()> attachHook = [&] () { bleClientAttached();};
 	std::function<void()> detachHook = [&] () { bleClientDetached(); activate(); };
