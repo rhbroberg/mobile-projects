@@ -1,4 +1,2 @@
 *.o
 *.axp
-post-gps/ARM/*.o
-post-gps/GATT/*.*
