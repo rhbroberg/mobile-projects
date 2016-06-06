@@ -35,6 +35,7 @@ public:
 	static void timerNonPrecise(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data);
 	static void timerPrecise(VM_TIMER_ID_PRECISE timer_id, void* user_data);
 	static void timerHISR(void* user_data);
+	static void icciRetrieve(VMCHAR *iccid, void *user_data);
 
 #ifdef WHY_ME
 	static void systemEvent(VMINT message, VMINT param);
