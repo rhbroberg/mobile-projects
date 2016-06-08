@@ -12,6 +12,7 @@
 #include "LEDBlinker.h"
 #include "AppInfo.h"
 #include "vmwdt.h"
+#include "InterruptMapper.h"
 
 namespace gpstracker
 {
@@ -35,6 +36,7 @@ protected:
 	VMINT32 go();
 	void postEntry();
 	void archiveEntry();
+	void motionChanged(const bool level);
 
 	AppInfo _applicationInfo;
 	GPSHelper _gps;
@@ -51,6 +53,7 @@ protected:
 	unsigned int _publishFailures;
 	VMCHAR _locationStatus[1024];
 	VM_WDT_HANDLE _watchdog;
+	InterruptMapper *_accelIdle;
 
 	// these can probably move into local scopes
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _configTimeout;

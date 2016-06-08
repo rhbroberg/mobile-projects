@@ -14,7 +14,7 @@
 		</output>
 		<options>
 			<compile>-mthumb-interwork -c -gdwarf-2 -gstrict-dwarf -fpic -mcpu=arm7tdmi-s -fvisibility=hidden -mthumb -mlittle-endian -O2 -D__COMPILER_GCC__ -fno-exceptions -fno-non-call-exceptions</compile>
-			<cppcompile>-fno-rtti -mthumb-interwork -c -gdwarf-2 -gstrict-dwarf -fpic -mcpu=arm7tdmi-s -fvisibility=hidden -mthumb -mlittle-endian -O2 -D__COMPILER_GCC__  -fno-exceptions -fno-non-call-exceptions -std=c++11</cppcompile>
+			<cppcompile>-DARDUINO=150 -D__AVR_ATtiny85__ -fno-rtti -mthumb-interwork -c -gdwarf-2 -gstrict-dwarf -fpic -mcpu=arm7tdmi-s -fvisibility=hidden -mthumb -mlittle-endian -O2 -D__COMPILER_GCC__  -fno-exceptions -fno-non-call-exceptions -std=c++11</cppcompile>
 			<link>-Wl,--gc-sections -fpic -pie --specs=nosys.specs -lstdc++ -lm</link>
 		</options>
 	</packageinfo>

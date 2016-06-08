@@ -34,6 +34,7 @@ ApplicationManager::ApplicationManager()
   , _networkIsReady(false)
   , _bleTimeout(0)
   , _watchdog(-1)
+  , _accelIdle(NULL)
 {
 //	_logitPtr = [&] (void) { return go(); };
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
@@ -238,6 +239,12 @@ ApplicationManager::start()
 }
 
 void
+ApplicationManager::motionChanged(const bool level)
+{
+	vm_log_info("application motion changed. is now: '%s'", level ? "static" : "moving");
+}
+
+void
 ApplicationManager::activate()
 {
 	if (_bleTimeout)
@@ -247,6 +254,14 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
+
+	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);
+	// map int1 pin to accelerometer interrupt; goes high when not moving
+	std::function<void(const unsigned int pin, const bool level)> interruptHook = [&] (const unsigned int pin, const bool level) { motionChanged(level); };
+	_accelIdle = new InterruptMapper(VM_PIN_P0, false, 100, false, true);
+	_accelIdle->setHook(interruptHook);
+	_accelIdle->enable();
+
 	//#define USE_HTTP
 #ifdef USE_HTTP
 	_blinker.change(LEDBlinker::white, 3000, 3000, 1024);
