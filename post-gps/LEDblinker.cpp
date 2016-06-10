@@ -1,4 +1,5 @@
 #include "LEDBlinker.h"
+#include "vmlog.h"
 #include <functional>
 #include "vmsystem.h"
 #include "vmtimer.h"
@@ -6,27 +7,17 @@
 #include "vmdcl_gpio.h"
 #include "ObjectCallbacks.h"
 
-void LEDBlinker::postMySignal(VM_TIMER_ID_NON_PRECISE tid)
-{
-	//vm_log_info("timer %d went off, posting signal", tid);
-	// if we attempt to delete a timer before it goes off the first time, the deletion fails - clearly a library defect
-	// next time it goes off here, update the timer id state and allow it to go away
-	deleteTimer(tid);
-	wakeup();
-}
+using namespace gpstracker;
 
 LEDBlinker::LEDBlinker(const unsigned short redPin,
 		const unsigned short greenPin, const unsigned short bluePin)
-: _currentColor(green), _onDuration(3000), _offDuration(3000), _currentRepeat(
-		1024), _redPin(redPin), _greenPin(greenPin), _bluePin(bluePin), _running(
-				false), _onoff(0), _noPreempt(false)
+: TimedTask("LEDBlinker")
+, _currentColor(green), _onDuration(3000), _offDuration(3000)
+, _currentRepeat(1024)
+, _redPin(redPin), _greenPin(greenPin), _bluePin(bluePin)
+, _onoff(0)
+, _noPreempt(false)
 {
-	// initialize function pointers to facilitate callbacks calling object methods directly
-	// these objects must have permanence beyond the stack frame where they are bound, so they are member data
-	_postMySignalPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { postMySignal(tid); };
-	_goPtr = [&] (void) { return go(); };
-
-	_signal = vm_signal_create();
 	vm_mutex_init(&_colorLock);
 
 	// 15 green
@@ -105,88 +96,35 @@ void LEDBlinker::updateLeds(const unsigned short mask)
 	//vm_log_info("leds set to %x", mask);
 }
 
-void LEDBlinker::stop()
+void
+LEDBlinker::loop()
 {
-	_running = false;
-	vm_log_info("leds stopping");
-}
+	vm_mutex_lock(&_colorLock);
 
-void LEDBlinker::start()
-{
-	if (!_running)
+	if (_currentRepeat > 0)
 	{
-		vm_log_info("leds starting");
+		_onoff = 1 - _onoff;
 
-		_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_goPtr, 126);
-		wakeup();
-	}
-	else
-	{
-		vm_log_info("leds already running, you ninny");
-	}
-}
-
-void LEDBlinker::wakeup()
-{
-	vm_signal_post(_signal);
-}
-
-void LEDBlinker::deleteTimer(VM_TIMER_ID_NON_PRECISE thisTimer)
-{
-	if (thisTimer > 0)
-	{
-		//vm_log_info("deleting timer %d", thisTimer);
-		VM_RESULT r = vm_timer_delete_non_precise(thisTimer);
-		if (r)
+		if (_onoff)
 		{
-			vm_log_info("timer %d deletion failed: %d", thisTimer, r);
+			updateLeds((unsigned short) _currentColor);
+			_timer = vm_timer_create_non_precise(_onDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
+			//vm_log_info("turned led on; setting timer %d for %d ms", _timer, _onDuration);
 		}
-
-		// only zero out 'current' timer if it's the same one being asked to be removed
-		// this is the other half of the workaround for the buggy timer library
-		if (thisTimer == _timer)
+		else
 		{
-			_timer = 0;
-		}
-	}
-}
-
-VMINT32 LEDBlinker::go()
-{
-	_running = true;
-
-	vm_log_info("rgb blinker online");
-	while (_running)
-	{
-		vm_signal_wait(_signal);
-
-		vm_mutex_lock(&_colorLock);
-
-		if (_currentRepeat > 0)
-		{
-			_onoff = 1 - _onoff;
-
-			if (_onoff)
+			updateLeds((unsigned short) black);
+			if (--_currentRepeat)
 			{
-				updateLeds((unsigned short) _currentColor);
-				_timer = vm_timer_create_non_precise(_onDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
-				//vm_log_info("turned led on; setting timer %d for %d ms", _timer, _onDuration);
+				_timer = vm_timer_create_non_precise(_offDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
+				//vm_log_info("turned led off; setting timer %d for %d ms", _timer, _offDuration);
 			}
 			else
 			{
-				updateLeds((unsigned short) black);
-				if (--_currentRepeat)
-				{
-					_timer = vm_timer_create_non_precise(_offDuration, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
-					//vm_log_info("turned led off; setting timer %d for %d ms", _timer, _offDuration);
-				}
-				else
-				{
-					_noPreempt = false;
-					// vm_log_info("last off cycle complete");
-				}
+				_noPreempt = false;
+				// vm_log_info("last off cycle complete");
 			}
 		}
-		vm_mutex_unlock(&_colorLock);
 	}
+	vm_mutex_unlock(&_colorLock);
 }
