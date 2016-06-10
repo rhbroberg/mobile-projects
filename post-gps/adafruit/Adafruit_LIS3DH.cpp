@@ -214,7 +214,6 @@ int16_t Adafruit_LIS3DH::readADC(uint8_t adc) {
   return value;
 }
 
-
 void
 Adafruit_LIS3DH::interruptOnMotion()
 {
@@ -224,7 +223,7 @@ Adafruit_LIS3DH::interruptOnMotion()
   writeRegister8(LIS3DH_REG_CTRL4, 0x88);
   writeRegister8(LIS3DH_REG_CTRL5, 0x00);
 
-  writeRegister8(LIS3DH_REG_INT1THS, 0x02);	// smaller is more sensitive; 0x01 never detects idle
+  writeRegister8(LIS3DH_REG_INT1THS, 0x04);	// smaller is more sensitive; 0x01 never detects idle
   writeRegister8(LIS3DH_REG_INT1DUR, 0x32);
   writeRegister8(LIS3DH_REG_INT1CFG, 0x95);
 }
