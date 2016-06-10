@@ -8,9 +8,6 @@
 namespace gpstracker
 {
 
-// forward necessary for self-referenced map below
-//class InterruptMapper;
-
 class InterruptMapper
 {
 public:

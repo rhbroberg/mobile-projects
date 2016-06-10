@@ -21,7 +21,7 @@ LEDBlinker::LEDBlinker(const unsigned short redPin,
 		1024), _redPin(redPin), _greenPin(greenPin), _bluePin(bluePin), _running(
 				false), _onoff(0), _noPreempt(false)
 {
-	// initialize function pointers to faciliate callbacks calling object methods directly
+	// initialize function pointers to facilitate callbacks calling object methods directly
 	// these objects must have permanence beyond the stack frame where they are bound, so they are member data
 	_postMySignalPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { postMySignal(tid); };
 	_goPtr = [&] (void) { return go(); };
