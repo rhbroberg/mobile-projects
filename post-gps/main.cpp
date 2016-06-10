@@ -75,7 +75,6 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 			// up
 			vm_log_debug("key is released\n");
 
-			//appmgr._blinker.start();
 		    appmgr.enableBLE();
 #ifdef TESTME
 			if (showBatteryStats())

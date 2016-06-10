@@ -13,6 +13,7 @@
 #include "AppInfo.h"
 #include "vmwdt.h"
 #include "InterruptMapper.h"
+#include "MotionTracker.h"
 
 namespace gpstracker
 {
@@ -46,14 +47,15 @@ protected:
 	const char *_journalName;
 	char *_hostIP;
 	DataJournal _dataJournal;
+	gpstracker::ConfigurationManager _config;
+	InterruptMapper *_activityInterrupt;
+	MotionTracker _motionTracker;
 	bool _networkIsReady;
 	VM_THREAD_HANDLE _thread;
-	gpstracker::ConfigurationManager _config;
 	VM_TIMER_ID_NON_PRECISE _bleTimeout;
 	unsigned int _publishFailures;
 	VMCHAR _locationStatus[1024];
 	VM_WDT_HANDLE _watchdog;
-	InterruptMapper *_accelIdle;
 
 	// these can probably move into local scopes
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _configTimeout;

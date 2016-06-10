@@ -34,7 +34,7 @@ ApplicationManager::ApplicationManager()
   , _networkIsReady(false)
   , _bleTimeout(0)
   , _watchdog(-1)
-  , _accelIdle(NULL)
+  , _activityInterrupt(NULL)
 {
 //	_logitPtr = [&] (void) { return go(); };
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
@@ -254,13 +254,15 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
+	_motionTracker.start();
+	_motionTracker.schedule(5000);
 
 	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);
 	// map int1 pin to accelerometer interrupt; goes high when not moving
 	std::function<void(const unsigned int pin, const bool level)> interruptHook = [&] (const unsigned int pin, const bool level) { motionChanged(level); };
-	_accelIdle = new InterruptMapper(VM_PIN_P0, false, 100, false, true);
-	_accelIdle->setHook(interruptHook);
-	_accelIdle->enable();
+	_activityInterrupt = new InterruptMapper(VM_PIN_P0, false, 100, false, true);
+	_activityInterrupt->setHook(interruptHook);
+	_activityInterrupt->enable();
 
 	//#define USE_HTTP
 #ifdef USE_HTTP

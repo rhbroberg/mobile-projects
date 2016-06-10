@@ -4,10 +4,11 @@
 #include "ObjectCallbacks.h"
 #include "vmlog.h"
 
-TimedTask::TimedTask(const char *name)
+TimedTask::TimedTask(const char *name, const bool persistentTimer)
 : _name(name)
 , _running(false)
 , _timer(0)
+, _persistentTimer(persistentTimer)
 {
 	// initialize function pointers to facilitate callbacks calling object methods directly
 	// these objects must have permanence beyond the stack frame where they are bound, so they are member data
@@ -22,7 +23,10 @@ TimedTask::postMySignal(VM_TIMER_ID_NON_PRECISE tid)
 	//vm_log_info("timer %d went off, posting signal", tid);
 	// if we attempt to delete a timer before it goes off the first time, the deletion fails - clearly a library defect
 	// next time it goes off here, update the timer id state and allow it to go away
-	deleteTimer(tid);
+	if (! _persistentTimer)
+	{
+		deleteTimer(tid);
+	}
 	wakeup();
 }
 
@@ -83,12 +87,20 @@ TimedTask::go()
 	_running = true;
 
 	vm_log_info("task %s, online", _name);
+	setup();
+
 	while (_running)
 	{
 		vm_signal_wait(_signal);
 		loop();
 	}
 	return 0;
+}
+
+void
+TimedTask::schedule(const unsigned long ms)
+{
+	_timer = vm_timer_create_non_precise(ms, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
 }
 
 void
@@ -101,4 +113,10 @@ void
 TimedTask::resumeHook()
 {
 
+}
+
+const bool
+TimedTask::setup()
+{
+	return true;
 }

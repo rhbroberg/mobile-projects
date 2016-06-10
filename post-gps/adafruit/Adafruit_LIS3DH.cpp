@@ -224,7 +224,7 @@ Adafruit_LIS3DH::interruptOnMotion()
   writeRegister8(LIS3DH_REG_CTRL4, 0x88);
   writeRegister8(LIS3DH_REG_CTRL5, 0x00);
 
-  writeRegister8(LIS3DH_REG_INT1THS, 0x08);
+  writeRegister8(LIS3DH_REG_INT1THS, 0x02);	// smaller is more sensitive; 0x01 never detects idle
   writeRegister8(LIS3DH_REG_INT1DUR, 0x32);
   writeRegister8(LIS3DH_REG_INT1CFG, 0x95);
 }
