@@ -35,6 +35,7 @@ ApplicationManager::ApplicationManager()
   , _bleTimeout(0)
   , _watchdog(-1)
   , _activityInterrupt(NULL)
+  , _powerState(true)
 {
 //	_logitPtr = [&] (void) { return go(); };
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
@@ -214,6 +215,7 @@ ApplicationManager::enableBLE()
 void
 ApplicationManager::start()
 {
+	_blinker.start();
 //#define DO_HE_BITE  // as of 2016-05 2502 firmware fails after a fixed number of watchdog resets, so behavior is broken
 #ifdef DO_HE_BITE
 	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
@@ -243,6 +245,8 @@ ApplicationManager::motionChanged(const bool level)
 {
 	vm_log_info("application motion changed. is now: '%s'", level ? "static" : "moving");
 }
+
+VM_TIMER_ID_NON_PRECISE logitTimer;
 
 void
 ApplicationManager::activate()
@@ -290,5 +294,36 @@ ApplicationManager::activate()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+}
+
+void
+ApplicationManager::gsmPowerChanged(VMBOOL success)
+{
+	vm_log_info("power switch success is %d, network state is currently %s", success, _powerState ? "enabled" : "disabled");
+
+	if (_powerState)
+	{
+		vm_log_info("scheduling gsm to re-enable");
+		vm_gsm_gprs_switch_mode(true);
+		_network.simStatus();
+		_network.simStatus(); _network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
+		logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	}
+}
+
+void
+ApplicationManager::buttonRelease()
+{
+	_powerState = 1 - _powerState;
+
+	if (! _powerState)
+	{
+		vm_log_info("no more logit");
+		vm_timer_delete_non_precise(logitTimer);
+
+		vm_log_info("closing connections");
+		_portal->disconnect();
+	}
+	_network.switchPower(_powerState);
 }

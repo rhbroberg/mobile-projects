@@ -25,6 +25,7 @@ public:
 	const bool simInfo();
 	void registerGATT(ConfigurationManager &);
 	void updateCellLocation();
+	void switchPower(const bool onOff);
 
 protected:
 	enum towerAttributes {arfcn, bsic, rxlev, location};
@@ -33,7 +34,6 @@ protected:
 	VM_RESULT dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result);
 	void bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event,
 			VMUINT data_account_id);
-
 	VMINT setAPN(const char *apn, const char *proxy,
 			const bool useProxy, const unsigned int proxyPort);
 

@@ -5,27 +5,28 @@
 #include "vmsystem.h"
 #include "vmlog.h" 
 #include "vmcmd.h" 
-#include "vmdcl.h"
-#include "vmdcl_gpio.h"
-#include "vmthread.h"
 #include "vmstdlib.h"
 
 #include "ResID.h"
 #include "main.h"
 #include "vmtimer.h"
-#include "vmgsm_gprs.h"
 #include "vmpwr.h"
 
 // key handling
 #include "vmdcl_kbd.h"
 #include "vmchset.h"
 #include "vmkeypad.h"
-#include "vmgsm.h"
 #include "vmbt_cm.h"
 
 #include "ApplicationManager.h"
 
 gpstracker::ApplicationManager appmgr;
+
+void
+powerChangeComplete(VMBOOL success)
+{
+	appmgr.gsmPowerChanged(success);
+}
 
 const bool
 showBatteryStats()
@@ -35,21 +36,6 @@ showBatteryStats()
 
 	vm_log_debug("battery level is %d, charging is %d\n", level, charging);
 	return charging;
-}
-
-void ledtest(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
-{
-	vm_log_debug("ledtest");
-	appmgr._blinker.change(gpstracker::LEDBlinker::green, 300, 300, 10);
-	// delay(10000);
-	vm_log_debug("another test");
-	appmgr._blinker.change(gpstracker::LEDBlinker::blue, 100, 500, 10);
-}
-
-void
-gsmPowerCallback(VMBOOL success)
-{
-	vm_log_info("power switch success is %d", success);
 }
 
 // map these into calls to the ApplicationManager::buttonAction()
@@ -74,24 +60,7 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 		{
 			// up
 			vm_log_debug("key is released\n");
-
-		    appmgr.enableBLE();
-#ifdef TESTME
-			if (showBatteryStats())
-			{
-				appmgr._blinker.change(LEDBlinker::color(LEDBlinker::green), 300, 200, 3, true);
-			}
-			else
-			{
-				appmgr._blinker.change(LEDBlinker::color(LEDBlinker::purple), 300, 200, 3, true);
-			}
-
-			static int onoff = 1;
-			onoff = 1 - onoff;
-
-			vm_log_info("turning power to %d", onoff);
-			vm_gsm_switch_mode(onoff, gsmPowerCallback);
-#endif
+		    appmgr.buttonRelease();
 		}
 		return 0;
 	}
@@ -100,15 +69,10 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
-	appmgr._blinker.start();
 
-#ifdef NOPE
-	vm_log_info("bluetooth power status:%d", vm_bt_cm_get_power_status());
-	vm_bt_cm_switch_on();
-	vm_log_info("bluetooth power status after switching off :%d", vm_bt_cm_get_power_status());
-#endif
+    appmgr.start();
 
-	if (showBatteryStats())
+    if (showBatteryStats())
 	{
 		appmgr._blinker.change(gpstracker::LEDBlinker::color(gpstracker::LEDBlinker::green), 300, 200, 3, true);
 	}
@@ -116,20 +80,19 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 	{
 		appmgr._blinker.change(gpstracker::LEDBlinker::color(gpstracker::LEDBlinker::purple), 300, 200, 3, true);
 	}
-
-    appmgr.start();
 }
 
 // events here should really iterate over registered listeners, using std::function objects or regular listener pattern
 void handle_sysevt(VMINT message, VMINT param)
 {
 	vm_log_info("handle_sysevt received %d", message);
+
 	switch (message)
 	{
 //	case VM_EVENT_CREATE:
 	case VM_EVENT_PAINT:
-	vm_timer_create_non_precise(100, initializeSystem, NULL);
-	break;
+		vm_timer_create_non_precise(100, initializeSystem, NULL);
+		break;
 
 	case VM_EVENT_CELL_INFO_CHANGE:
 		/* After opening the cell, this event will occur when the cell info changes.

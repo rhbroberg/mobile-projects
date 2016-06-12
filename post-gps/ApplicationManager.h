@@ -25,6 +25,8 @@ public:
 	void start();
 	void cellChanged();
 	void enableBLE();
+	void buttonRelease();
+	void gsmPowerChanged(VMBOOL success);
 
 protected:
 	void activate();
@@ -38,6 +40,7 @@ protected:
 	void postEntry();
 	void archiveEntry();
 	void motionChanged(const bool level);
+	void power(const bool onOff);
 
 	AppInfo _applicationInfo;
 	GPSHelper _gps;
@@ -56,6 +59,7 @@ protected:
 	unsigned int _publishFailures;
 	VMCHAR _locationStatus[1024];
 	VM_WDT_HANDLE _watchdog;
+	bool _powerState;
 
 	// these can probably move into local scopes
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _configTimeout;
