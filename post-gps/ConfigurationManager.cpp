@@ -112,13 +112,19 @@ ConfigurationManager::active() const
 void
 ConfigurationManager::addService(gatt::Service *service)
 {
-	_gatt->addService(service);
+	if (_gatt)
+	{
+		_gatt->addService(service);
+	}
 }
 
 void
 ConfigurationManager::bindConnectionListener(std::function<void()> connect, std::function<void()> disconnect)
 {
-	_gatt->bindConnectionListener(connect, disconnect);
+	if (_gatt)
+	{
+		_gatt->bindConnectionListener(connect, disconnect);
+	}
 }
 
 void
@@ -130,7 +136,7 @@ ConfigurationManager::buildServices()
 		networking->addCharacteristic(&ApplicationManager::_apn._ble);
 		networking->addCharacteristic(&ApplicationManager::_proxyIP._ble);
 		networking->addCharacteristic(&_proxyPort._ble);
-		_gatt->addService(networking);
+		addService(networking);
 	}
 
 	{
@@ -140,14 +146,14 @@ ConfigurationManager::buildServices()
 		mqtt->addCharacteristic(&ApplicationManager::_aioUsername._ble);
 		mqtt->addCharacteristic(&ApplicationManager::_aioKey._ble);
 		mqtt->addCharacteristic(&_mqttPort._ble);
-		_gatt->addService(mqtt);
+		addService(mqtt);
 	}
 
 	{
 		Service *post = new gatt::Service(post_service, true);
 
 		post->addCharacteristic(&_gpsDelay._ble);
-		_gatt->addService(post);
+		addService(post);
 	}
 }
 
