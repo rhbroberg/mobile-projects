@@ -123,12 +123,13 @@ GSMNetwork::switchPower(const bool onOff)
 	{
 		// block until bearer complete before switching off?
 		disable();
+		_isEnabled = false;
 		vm_gsm_cell_close();
 		vm_gsm_gprs_switch_mode(0);
 	}
-	VMBOOL switchStatus = true; // vm_gsm_switch_mode(onOff, powerChangeComplete);
+	VMBOOL switchStatus = vm_gsm_switch_mode(onOff, powerChangeComplete);
 	vm_log_info("turning GSM power %s, status of switch is %d", onOff ? "on" : "off", switchStatus);
-	powerChangeComplete(true);
+	// powerChangeComplete(true);
 }
 
 VM_RESULT GSMNetwork::dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result)
@@ -173,6 +174,7 @@ GSMNetwork::queryCellInfo(const towerAttributes which)
 {
 	vm_log_info("queryCellInfo hook: %d", which);
 	vm_gsm_cell_info_t info; /* cell information data */
+	memset(&info, 0, sizeof(info));
 	vm_gsm_cell_get_current_cell_info(&info);
 
 	switch (which)
@@ -193,6 +195,7 @@ void
 GSMNetwork::updateCellLocation()
 {
 	vm_gsm_cell_info_t info; /* cell information data */
+	memset(&info, 0, sizeof(info));
 	vm_gsm_cell_get_current_cell_info(&info);
 
 	sprintf((VMSTR)_towerLocation, (VMCSTR)"%d;%d;%d;%d", info.mcc, info.mnc, info.lac, info.ci);

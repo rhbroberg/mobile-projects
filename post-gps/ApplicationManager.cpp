@@ -20,9 +20,13 @@ extern PersistentGATT<unsigned long> _proxyPort;
 extern PersistentGATT<unsigned long> _mqttPort;
 extern PersistentGATT<unsigned long> _gpsDelay;
 
+int hack = 0;
+
 // #include HTTPSSender.h
 #include "vmhttps.h"
 void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data);
+
+int hackitBig = 0;
 
 ApplicationManager::ApplicationManager()
   : _publishFailures(0)
@@ -105,6 +109,13 @@ ApplicationManager::postEntry()
 void
 ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 {
+	if (hack)
+	{
+		vm_log_info("in logit after power cycle hack");
+		_network.simStatus();
+		return;
+	}
+
 	// this block moves back to 'go' once it is its own thread
 	if (_watchdog >= 0)
 	{
@@ -164,7 +175,16 @@ ApplicationManager::mqttInit()
 {
 	vm_log_debug("using native adafruit connection to connect to %s", _hostIP);
 
-	_portal = new MQTTnative(_hostIP,(const char *) _aioUsername.getString(), (const char *)_aioKey.getString(), _mqttPort.getValue());
+	// this will leak _portal on subsequent poweroff/on situations
+	if (! _portal)
+	{
+		_portal = new MQTTnative(_hostIP,(const char *) _aioUsername.getString(), (const char *)_aioKey.getString(), _mqttPort.getValue());
+	}
+	else
+	{
+		vm_log_info("reusing existing portal and previous connection info");
+	}
+
 	_portal->setTimeout(15001);
 	_locationTopic = _portal->topicHandle("l");
 	// contains calls which must be made using LTask-like facility (use std::functional) else random disconnections
@@ -212,6 +232,31 @@ ApplicationManager::enableBLE()
 	}
 }
 
+#include "vmgsm_cell.h"
+
+void
+bigHack(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
+{
+	// VM_RESULT r = vm_timer_delete_non_precise(tid);
+	ApplicationManager *This = (ApplicationManager *) user_data;
+
+	vm_log_info("in hack baby: %d", hackitBig);
+	if (hackitBig)
+	{
+		hackitBig = 0;
+		if (This->_powerState)
+		{
+			vm_log_info("scheduling gsm to re-enable");
+			vm_gsm_gprs_switch_mode(1);
+			VMINT openResult = vm_gsm_cell_open();
+			vm_log_info("vm_gsm_cell_open status is: %d", openResult);
+			// probably call activate() instead to wake everything up?
+			This->_network.enable(This->_networkReadyPtr, (const char *)This->_apn.getString(), (const char *)This->_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
+			This->_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &This->_logitPtr);
+		}
+	}
+}
+
 void
 ApplicationManager::start()
 {
@@ -236,6 +281,7 @@ ApplicationManager::start()
 
 	_config.bindConnectionListener(attachHook, detachHook);
 
+	vm_timer_create_non_precise(5000, bigHack, this);
 	_configTimeout = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { activate(); };
 	_bleTimeout = vm_timer_create_non_precise(30000, ObjectCallbacks::timerNonPrecise, &_configTimeout);
 }
@@ -245,8 +291,6 @@ ApplicationManager::motionChanged(const bool level)
 {
 	vm_log_info("application motion changed. is now: '%s'", level ? "static" : "moving");
 }
-
-VM_TIMER_ID_NON_PRECISE logitTimer;
 
 void
 ApplicationManager::activate()
@@ -260,7 +304,6 @@ ApplicationManager::activate()
 	_config.disableBLE();
 	_motionTracker.start();
 	_motionTracker.schedule(5000);
-
 	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);
 	// map int1 pin to accelerometer interrupt; goes high when not moving
 	std::function<void(const unsigned int pin, const bool level)> interruptHook = [&] (const unsigned int pin, const bool level) { motionChanged(level); };
@@ -294,22 +337,42 @@ ApplicationManager::activate()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+}
+
+#include "vmgsm_cell.h"
+
+void
+whatup(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
+{
+	vm_log_info("whatup, dog");
+	ApplicationManager *This = (ApplicationManager *) user_data;
+	vm_timer_delete_non_precise(tid);
+
+	hackitBig = 1;
 }
 
 void
 ApplicationManager::gsmPowerChanged(VMBOOL success)
 {
-	vm_log_info("power switch success is %d, network state is currently %s", success, _powerState ? "enabled" : "disabled");
+	VM_THREAD_HANDLE mainThread = vm_thread_get_main_handle();
+	VM_THREAD_HANDLE myThread = vm_thread_get_current_handle();
+	vm_log_info("power switch success is %d, power state has switched to %s; main is %d, my is %d", success, _powerState ? "enabled" : "disabled", mainThread, myThread);
 
+#ifdef NOPE
 	if (_powerState)
 	{
 		vm_log_info("scheduling gsm to re-enable");
 		vm_gsm_gprs_switch_mode(true);
 		_network.simStatus();
-		_network.simStatus(); _network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
-		logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+		//_network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
+		hack = 1;
+//		_logitTimer = vm_timer_create_non_precise(/*_gpsDelay.getValue()*/ 10000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
 	}
+#else
+	hackitBig = 1;
+	//vm_timer_create_non_precise(20000, whatup, this);
+#endif
 }
 
 void
@@ -320,7 +383,7 @@ ApplicationManager::buttonRelease()
 	if (! _powerState)
 	{
 		vm_log_info("no more logit");
-		vm_timer_delete_non_precise(logitTimer);
+		vm_timer_delete_non_precise(_logitTimer);
 
 		vm_log_info("closing connections");
 		_portal->disconnect();

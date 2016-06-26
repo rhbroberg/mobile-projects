@@ -28,7 +28,7 @@ public:
 	void buttonRelease();
 	void gsmPowerChanged(VMBOOL success);
 
-protected:
+//protected:
 	void activate();
 	void bleClientAttached();
 	void bleClientDetached();
@@ -60,6 +60,7 @@ protected:
 	VMCHAR _locationStatus[1024];
 	VM_WDT_HANDLE _watchdog;
 	bool _powerState;
+	VM_TIMER_ID_NON_PRECISE _logitTimer;
 
 	// these can probably move into local scopes
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _configTimeout;
