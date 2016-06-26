@@ -85,6 +85,37 @@ ObjectCallbacks::icciRetrieve(VMCHAR *iccid, void *method)
 	(*((std::function<void (void)> *)(method)))();
 }
 
+#include "vmlog.h"
+#include "message.h"
+
+VM_TIMER_ID_NON_PRECISE
+ObjectCallbacks::create_non_precise(VMUINT32 milliseconds, vm_timer_non_precise_callback timer_procedure, void *user_data)
+{
+	VM_TIMER_ID_NON_PRECISE tid = 0;
+	vm_mutex_t m_mutex;
+	VM_THREAD_HANDLE m_handle = vm_thread_get_main_handle();
+	vm_mutex_init(&m_mutex);
+    VM_SIGNAL_ID m_signal = vm_signal_create();
+
+    vm_log_info("about to lock");
+	vm_mutex_lock(&m_mutex);
+
+	std::function<void()> inMain = [&](){ tid = vm_timer_create_non_precise(milliseconds, timer_procedure, user_data); vm_signal_post(m_signal); };
+	vm_thread_message_t message;
+	message.message_id = VM_MSG_ARDUINO_CALL;
+	message.user_data = &inMain;
+    vm_log_info("about to send");
+	vm_thread_send_message(m_handle, &message);
+
+    vm_log_info("about to wait");
+	vm_signal_wait(m_signal);
+    vm_log_info("about to unlock");
+    vm_mutex_unlock(&m_mutex);
+    vm_log_info("all done");
+
+	return tid;
+}
+
 #ifdef NOPE
 void
 ObjectCallbacks::systemEvent(VMINT message, VMINT param)

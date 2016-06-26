@@ -18,6 +18,9 @@
 #include "vmkeypad.h"
 #include "vmbt_cm.h"
 
+#include "message.h"
+#include <functional>
+
 #include "ApplicationManager.h"
 
 gpstracker::ApplicationManager appmgr;
@@ -110,6 +113,17 @@ void handle_sysevt(VMINT message, VMINT param)
 
 	case VM_EVENT_QUIT:
 		break;
+
+		/* Special event for arduino application, when arduino thead need call LinkIt 2.0 inteface, it will use this event  */
+
+	case VM_MSG_ARDUINO_CALL:
+	{
+		vm_log_info("in rhb arduino call");
+		std::function<void()> *inMain = (std::function<void()> *) &param;
+		(*inMain)();
+		vm_log_info("after rhb arduino call made in main");
+		break;
+	}
 	}
 }
 

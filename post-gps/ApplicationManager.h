@@ -28,7 +28,7 @@ public:
 	void buttonRelease();
 	void gsmPowerChanged(VMBOOL success);
 
-//protected:
+protected:
 	void activate();
 	void bleClientAttached();
 	void bleClientDetached();
@@ -40,7 +40,7 @@ public:
 	void postEntry();
 	void archiveEntry();
 	void motionChanged(const bool level);
-	void power(const bool onOff);
+	void powerOnComplete(VM_TIMER_ID_NON_PRECISE tid);
 
 	AppInfo _applicationInfo;
 	GPSHelper _gps;
@@ -59,7 +59,7 @@ public:
 	unsigned int _publishFailures;
 	VMCHAR _locationStatus[1024];
 	VM_WDT_HANDLE _watchdog;
-	bool _powerState;
+	bool _powerState, _gsmPoweredOn;
 	VM_TIMER_ID_NON_PRECISE _logitTimer;
 
 	// these can probably move into local scopes
@@ -68,6 +68,7 @@ public:
 	std::function<void (void)> _networkReadyPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _mqttConnectPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _logitPtr;
+	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _powerOnPtr;
 //	std::function<VMINT32 (void)> _logitPtr;
 
 public:

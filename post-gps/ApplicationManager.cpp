@@ -20,13 +20,9 @@ extern PersistentGATT<unsigned long> _proxyPort;
 extern PersistentGATT<unsigned long> _mqttPort;
 extern PersistentGATT<unsigned long> _gpsDelay;
 
-int hack = 0;
-
 // #include HTTPSSender.h
 #include "vmhttps.h"
 void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data);
-
-int hackitBig = 0;
 
 ApplicationManager::ApplicationManager()
   : _publishFailures(0)
@@ -40,11 +36,13 @@ ApplicationManager::ApplicationManager()
   , _watchdog(-1)
   , _activityInterrupt(NULL)
   , _powerState(true)
+  , _gsmPoweredOn(false)
 {
 //	_logitPtr = [&] (void) { return go(); };
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
 //	_resolvedPtr = [&] (char *host) { _hostIP = host; vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_mqttConnectPtr); };
 	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
+	_powerOnPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { powerOnComplete(tid); };
 	_resolvedPtr = [&] (char *host) { _hostIP = host; mqttInit(); };
 	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) _aioServer.getString(), _resolvedPtr); };
 
@@ -109,13 +107,6 @@ ApplicationManager::postEntry()
 void
 ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 {
-	if (hack)
-	{
-		vm_log_info("in logit after power cycle hack");
-		_network.simStatus();
-		return;
-	}
-
 	// this block moves back to 'go' once it is its own thread
 	if (_watchdog >= 0)
 	{
@@ -232,34 +223,32 @@ ApplicationManager::enableBLE()
 	}
 }
 
-#include "vmgsm_cell.h"
-
 void
-bigHack(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
+ApplicationManager::powerOnComplete(VM_TIMER_ID_NON_PRECISE tid)
 {
-	// VM_RESULT r = vm_timer_delete_non_precise(tid);
-	ApplicationManager *This = (ApplicationManager *) user_data;
+	vm_log_info("in powerOnComplete");
 
-	vm_log_info("in hack baby: %d", hackitBig);
-	if (hackitBig)
+	if (_gsmPoweredOn)
 	{
-		hackitBig = 0;
-		if (This->_powerState)
-		{
-			vm_log_info("scheduling gsm to re-enable");
-			vm_gsm_gprs_switch_mode(1);
-			VMINT openResult = vm_gsm_cell_open();
-			vm_log_info("vm_gsm_cell_open status is: %d", openResult);
-			// probably call activate() instead to wake everything up?
-			This->_network.enable(This->_networkReadyPtr, (const char *)This->_apn.getString(), (const char *)This->_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
-			This->_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &This->_logitPtr);
-		}
+		vm_log_info("ready to go");
+		VM_RESULT r = vm_timer_delete_non_precise(tid);
+		_gsmPoweredOn = false;
+		vm_log_info("scheduling gsm to re-enable");
+		vm_gsm_gprs_switch_mode(1);
+		_network.simStatus();
+		// probably call activate() instead to wake everything up?
+		_network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
+		_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
 	}
 }
 
 void
 ApplicationManager::start()
 {
+	VM_THREAD_HANDLE mainThread = vm_thread_get_main_handle();
+	VM_THREAD_HANDLE myThread = vm_thread_get_current_handle();
+	vm_log_info("threads: main is %d, my is %d", mainThread, myThread);
+
 	_blinker.start();
 //#define DO_HE_BITE  // as of 2016-05 2502 firmware fails after a fixed number of watchdog resets, so behavior is broken
 #ifdef DO_HE_BITE
@@ -281,7 +270,6 @@ ApplicationManager::start()
 
 	_config.bindConnectionListener(attachHook, detachHook);
 
-	vm_timer_create_non_precise(5000, bigHack, this);
 	_configTimeout = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { activate(); };
 	_bleTimeout = vm_timer_create_non_precise(30000, ObjectCallbacks::timerNonPrecise, &_configTimeout);
 }
@@ -340,39 +328,11 @@ ApplicationManager::activate()
 	_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
 }
 
-#include "vmgsm_cell.h"
-
-void
-whatup(VM_TIMER_ID_NON_PRECISE tid, void* user_data)
-{
-	vm_log_info("whatup, dog");
-	ApplicationManager *This = (ApplicationManager *) user_data;
-	vm_timer_delete_non_precise(tid);
-
-	hackitBig = 1;
-}
-
 void
 ApplicationManager::gsmPowerChanged(VMBOOL success)
 {
-	VM_THREAD_HANDLE mainThread = vm_thread_get_main_handle();
-	VM_THREAD_HANDLE myThread = vm_thread_get_current_handle();
-	vm_log_info("power switch success is %d, power state has switched to %s; main is %d, my is %d", success, _powerState ? "enabled" : "disabled", mainThread, myThread);
-
-#ifdef NOPE
-	if (_powerState)
-	{
-		vm_log_info("scheduling gsm to re-enable");
-		vm_gsm_gprs_switch_mode(true);
-		_network.simStatus();
-		//_network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
-		hack = 1;
-//		_logitTimer = vm_timer_create_non_precise(/*_gpsDelay.getValue()*/ 10000, ObjectCallbacks::timerNonPrecise, &_logitPtr);
-	}
-#else
-	hackitBig = 1;
-	//vm_timer_create_non_precise(20000, whatup, this);
-#endif
+	vm_log_info("power switch success is %d, power state has switched to %s", success, _powerState ? "enabled" : "disabled");
+	_gsmPoweredOn = true;
 }
 
 void
@@ -387,6 +347,14 @@ ApplicationManager::buttonRelease()
 
 		vm_log_info("closing connections");
 		_portal->disconnect();
+	}
+	else
+	{
+		// ::gsmPowerChanged() should be the place to start everything to start, but as of 2016-06-26 mediatek
+		// firmware has a bug; any activity in that callback (including a scheduled timer) executes in the wrong
+		// processId and or context, and fails.  instead, schedule a timer in this thread, which is safe, to go off
+		// once ApplicationManager is an active object (TimedTask) this can be replaced with a signal wait/post
+		vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_powerOnPtr);
 	}
 	_network.switchPower(_powerState);
 }

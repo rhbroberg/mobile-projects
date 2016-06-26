@@ -45,7 +45,7 @@ TimedTask::start()
 	{
 		vm_log_info("task '%s' starting", _name);
 
-		_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_goPtr, 126);
+		_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_goPtr, 100);
 		wakeup();
 	}
 	else
