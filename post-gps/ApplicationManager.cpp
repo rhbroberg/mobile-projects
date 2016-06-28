@@ -332,7 +332,7 @@ void
 ApplicationManager::gsmPowerChanged(VMBOOL success)
 {
 	vm_log_info("power switch success is %d, power state has switched to %s", success, _powerState ? "enabled" : "disabled");
-	_gsmPoweredOn = true;
+	_gsmPoweredOn = _powerState;
 }
 
 void
@@ -347,6 +347,8 @@ ApplicationManager::buttonRelease()
 
 		vm_log_info("closing connections");
 		_portal->disconnect();
+		_motionTracker.pause();
+		_blinker.change(LEDBlinker::red, 2000, 500, 3);
 	}
 	else
 	{
@@ -355,6 +357,8 @@ ApplicationManager::buttonRelease()
 		// processId and or context, and fails.  instead, schedule a timer in this thread, which is safe, to go off
 		// once ApplicationManager is an active object (TimedTask) this can be replaced with a signal wait/post
 		vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_powerOnPtr);
+		_motionTracker.resume();
+		_blinker.change(LEDBlinker::green, 2000, 500, 3);
 	}
 	_network.switchPower(_powerState);
 }

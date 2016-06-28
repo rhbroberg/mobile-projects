@@ -13,6 +13,8 @@ public:
 protected:
 	virtual void loop();
 	virtual const bool setup();
+	virtual void pauseHook();
+	virtual void resumeHook();
 
 	Adafruit_LIS3DH _accelerometer;
 

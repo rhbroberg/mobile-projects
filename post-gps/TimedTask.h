@@ -32,6 +32,7 @@ protected:
 	VM_THREAD_HANDLE _thread;
 	VM_TIMER_ID_NON_PRECISE _timer;
 	VM_SIGNAL_ID _signal;
+	unsigned long _loopDelay;
 	std::function<VMINT32 (void)> _goPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE tid)> _postMySignalPtr;
 };

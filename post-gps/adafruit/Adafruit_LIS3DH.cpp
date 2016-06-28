@@ -131,6 +131,20 @@ bool Adafruit_LIS3DH::begin(uint8_t i2caddr) {
   return true;
 }
 
+void Adafruit_LIS3DH::sleep() {
+	// this may effect the sensitivity of the motion interrupt
+#ifdef NOT_READY_YET
+	writeRegister8(LIS3DH_REG_CTRL1, 0x0F);
+
+	// slow down sampling
+	setDataRate(LIS3DH_DATARATE_50_HZ); // LIS3DH_DATARATE_1_HZ); // LIS3DH_DATARATE_POWERDOWN);
+
+    writeRegister8(LIS3DH_REG_CTRL4, 0x80);
+#endif
+    // disable adcs
+    writeRegister8(LIS3DH_REG_TEMPCFG, 0x00);
+}
+
 void Adafruit_LIS3DH::read(void) {
   // read x y z at once
 
@@ -214,13 +228,16 @@ int16_t Adafruit_LIS3DH::readADC(uint8_t adc) {
   return value;
 }
 
+
 void
 Adafruit_LIS3DH::interruptOnMotion()
 {
   writeRegister8(LIS3DH_REG_CTRL1, 0x27);
+//  writeRegister8(LIS3DH_REG_CTRL1, 0x2F);  lower power mode
   writeRegister8(LIS3DH_REG_CTRL2, 0x01);
   writeRegister8(LIS3DH_REG_CTRL3, 0x40);
   writeRegister8(LIS3DH_REG_CTRL4, 0x88);
+//  writeRegister8(LIS3DH_REG_CTRL4, 0x80); lower power mode
   writeRegister8(LIS3DH_REG_CTRL5, 0x00);
 
   writeRegister8(LIS3DH_REG_INT1THS, 0x04);	// smaller is more sensitive; 0x01 never detects idle

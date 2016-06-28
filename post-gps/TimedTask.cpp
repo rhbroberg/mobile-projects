@@ -9,6 +9,7 @@ TimedTask::TimedTask(const char *name, const bool persistentTimer)
 , _running(false)
 , _timer(0)
 , _persistentTimer(persistentTimer)
+, _loopDelay(0)
 {
 	// initialize function pointers to facilitate callbacks calling object methods directly
 	// these objects must have permanence beyond the stack frame where they are bound, so they are member data
@@ -101,6 +102,21 @@ void
 TimedTask::schedule(const unsigned long ms)
 {
 	_timer = vm_timer_create_non_precise(ms, ObjectCallbacks::timerNonPrecise, &_postMySignalPtr);
+	_loopDelay = ms;
+}
+
+void
+TimedTask::pause()
+{
+	deleteTimer(_timer);
+	pauseHook();
+}
+
+void
+TimedTask::resume()
+{
+	schedule(_loopDelay);
+	resumeHook();
 }
 
 void

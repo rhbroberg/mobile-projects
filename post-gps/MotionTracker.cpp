@@ -41,3 +41,16 @@ MotionTracker::loop()
 {
 	read();
 }
+
+void
+MotionTracker::pauseHook()
+{
+	vm_log_info("putting accelerometer mostly to sleep");
+	_accelerometer.sleep();
+}
+
+void
+MotionTracker::resumeHook()
+{
+	setup();
+}
