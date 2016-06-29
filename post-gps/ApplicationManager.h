@@ -41,6 +41,7 @@ protected:
 	void archiveEntry();
 	void motionChanged(const bool level);
 	void powerOnComplete(VM_TIMER_ID_NON_PRECISE tid);
+	void toggleSleep();
 
 	AppInfo _applicationInfo;
 	GPSHelper _gps;
@@ -56,6 +57,7 @@ protected:
 	bool _networkIsReady;
 	VM_THREAD_HANDLE _thread;
 	VM_TIMER_ID_NON_PRECISE _bleTimeout;
+	VM_TIMER_ID_NON_PRECISE _idleTimeout;
 	unsigned int _publishFailures;
 	VMCHAR _locationStatus[1024];
 	VM_WDT_HANDLE _watchdog;
@@ -69,6 +71,7 @@ protected:
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _mqttConnectPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _logitPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _powerOnPtr;
+	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _idleMotionPtr;
 //	std::function<VMINT32 (void)> _logitPtr;
 
 public:

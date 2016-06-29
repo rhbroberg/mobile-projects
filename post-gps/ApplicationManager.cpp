@@ -19,6 +19,7 @@ using namespace gpstracker;
 extern PersistentGATT<unsigned long> _proxyPort;
 extern PersistentGATT<unsigned long> _mqttPort;
 extern PersistentGATT<unsigned long> _gpsDelay;
+extern PersistentGATT<unsigned long> _motionDelay;
 
 // #include HTTPSSender.h
 #include "vmhttps.h"
@@ -37,12 +38,14 @@ ApplicationManager::ApplicationManager()
   , _activityInterrupt(NULL)
   , _powerState(true)
   , _gsmPoweredOn(false)
+  , _idleTimeout(0)
 {
 //	_logitPtr = [&] (void) { return go(); };
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
 //	_resolvedPtr = [&] (char *host) { _hostIP = host; vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_mqttConnectPtr); };
 	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
 	_powerOnPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { powerOnComplete(tid); };
+	_idleMotionPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { vm_timer_delete_non_precise(tid); _powerState = 0; toggleSleep(); };
 	_resolvedPtr = [&] (char *host) { _hostIP = host; mqttInit(); };
 	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) _aioServer.getString(), _resolvedPtr); };
 
@@ -278,6 +281,34 @@ void
 ApplicationManager::motionChanged(const bool level)
 {
 	vm_log_info("application motion changed. is now: '%s'", level ? "static" : "moving");
+
+	if (level)
+	{
+		if (_motionDelay.getValue())
+		{
+			vm_log_info("if no activity within %d ms will go to sleep", _motionDelay.getValue());
+			_idleTimeout = vm_timer_create_non_precise(_motionDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_idleMotionPtr);
+		}
+		else
+		{
+			vm_log_info("motion delay set to zero; no sleeping scheduled");
+		}
+	}
+	else
+	{
+		if (_idleTimeout)
+		{
+			vm_log_info("activity resumed; cancelling timer %d", _idleTimeout);
+			vm_timer_delete_non_precise(_idleTimeout);
+			_idleTimeout = 0;
+
+			if (! _powerState)
+			{
+				_powerState = 1;
+				toggleSleep();
+			}
+		}
+	}
 }
 
 void
@@ -339,7 +370,12 @@ void
 ApplicationManager::buttonRelease()
 {
 	_powerState = 1 - _powerState;
+	toggleSleep();
+}
 
+void
+ApplicationManager::toggleSleep()
+{
 	if (! _powerState)
 	{
 		vm_log_info("no more logit");

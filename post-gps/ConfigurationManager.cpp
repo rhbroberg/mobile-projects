@@ -46,6 +46,10 @@ PersistentGATT<unsigned long> _gpsDelay("gps.delay", gpsDelay_uuid,
 		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
 		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 4000);
 
+PersistentGATT<unsigned long> _motionDelay("motion.delay", motionDelay_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
+		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 60000);
+
 // PersistentGATTByte and PersistentGATT need common ancestor; hash that into a map for retrieval from
 // ConfigurationManager.  Create a singleton for ConfigurationManager and allow static objects to
 // register a callback for BLE services/characteristics which need/should stay in other objects.
@@ -155,6 +159,13 @@ ConfigurationManager::buildServices()
 		post->addCharacteristic(&_gpsDelay._ble);
 		addService(post);
 	}
+
+	{
+		Service *motion = new gatt::Service(motion_service, true);
+
+		motion->addCharacteristic(&_motionDelay._ble);
+		addService(motion);
+	}
 }
 
 void
@@ -176,6 +187,7 @@ ConfigurationManager::mapEEPROM()
 	_eeprom->add(&_proxyPort);
 	_eeprom->add(&_mqttPort);
 	_eeprom->add(&_gpsDelay);
+	_eeprom->add(&_motionDelay);
 
     _eeprom->start();
 	vm_log_info("read back %s and %d, %d", _frist.getString(), _second.getValue(), _third.getValue());
