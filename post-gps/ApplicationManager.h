@@ -12,6 +12,8 @@
 #include "LEDBlinker.h"
 #include "AppInfo.h"
 #include "vmwdt.h"
+#include "InterruptMapper.h"
+#include "MotionTracker.h"
 
 namespace gpstracker
 {
@@ -23,6 +25,8 @@ public:
 	void start();
 	void cellChanged();
 	void enableBLE();
+	void buttonRelease();
+	void gsmPowerChanged(VMBOOL success);
 
 protected:
 	void activate();
@@ -35,6 +39,9 @@ protected:
 	VMINT32 go();
 	void postEntry();
 	void archiveEntry();
+	void motionChanged(const bool level);
+	void powerOnComplete(VM_TIMER_ID_NON_PRECISE tid);
+	void toggleSleep();
 
 	AppInfo _applicationInfo;
 	GPSHelper _gps;
@@ -44,13 +51,18 @@ protected:
 	const char *_journalName;
 	char *_hostIP;
 	DataJournal _dataJournal;
+	gpstracker::ConfigurationManager _config;
+	InterruptMapper *_activityInterrupt;
+	MotionTracker _motionTracker;
 	bool _networkIsReady;
 	VM_THREAD_HANDLE _thread;
-	gpstracker::ConfigurationManager _config;
 	VM_TIMER_ID_NON_PRECISE _bleTimeout;
+	VM_TIMER_ID_NON_PRECISE _idleTimeout;
 	unsigned int _publishFailures;
 	VMCHAR _locationStatus[1024];
 	VM_WDT_HANDLE _watchdog;
+	bool _powerState, _gsmPoweredOn;
+	VM_TIMER_ID_NON_PRECISE _logitTimer;
 
 	// these can probably move into local scopes
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _configTimeout;
@@ -58,6 +70,8 @@ protected:
 	std::function<void (void)> _networkReadyPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _mqttConnectPtr;
 	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _logitPtr;
+	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _powerOnPtr;
+	std::function<void (VM_TIMER_ID_NON_PRECISE timer_id)> _idleMotionPtr;
 //	std::function<VMINT32 (void)> _logitPtr;
 
 public:

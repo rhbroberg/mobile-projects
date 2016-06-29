@@ -1,17 +1,17 @@
-#ifndef _LEDBlinker_h
-#define _LEDBlinker_h
+#pragma once
 
 #include "vmtype.h"
 #include "vmsystem.h"
 #include "vmcmd.h"
-#include "vmlog.h"
-#include "vmthread.h"
 #include "vmdcl.h"
 #include "vmdcl_gpio.h"
-#include "vmtimer.h"
 #include <functional>
+#include "TimedTask.h"
 
-class LEDBlinker
+namespace gpstracker
+{
+
+class LEDBlinker : public TimedTask
 {
 public:
 	LEDBlinker(const unsigned short redPin = 17, const unsigned short greenPin =
@@ -32,33 +32,19 @@ public:
 	void change(const LEDBlinker::color, const unsigned long onDelay,
 			const unsigned long offDelay = 0, const unsigned short repeat = 1,
 			const bool noPreempt = false);
-	void stop();
-	void start();
-	VMINT32 go();
-	void wakeup();
-	void deleteTimer(VM_TIMER_ID_NON_PRECISE = 0);
 
 protected:
 	void updateLeds(const unsigned short);
+	virtual void loop();
 
-	std::function<VMINT32 (void)> _goPtr;
-	std::function<void (VM_TIMER_ID_NON_PRECISE tid)> _postMySignalPtr;
-	VMBOOL _running, _noPreempt;
+	VMBOOL _noPreempt;
 	int _onoff;
 	color _currentColor;
 	unsigned long _onDuration, _offDuration;
 	unsigned short _currentRepeat;
 	const unsigned short _redPin, _greenPin, _bluePin;
-
 	VM_DCL_HANDLE _greenHandle, _blueHandle, _redHandle;
-
-	VM_THREAD_HANDLE _thread;
-	VM_TIMER_ID_NON_PRECISE _timer;
-	VM_SIGNAL_ID _signal;
 	vm_mutex_t _colorLock;
 
-	void postMySignal(VM_TIMER_ID_NON_PRECISE tid);
-
 };
-
-#endif // _LEDBlinker_h
+}

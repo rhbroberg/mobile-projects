@@ -19,6 +19,7 @@ using namespace gpstracker;
 extern PersistentGATT<unsigned long> _proxyPort;
 extern PersistentGATT<unsigned long> _mqttPort;
 extern PersistentGATT<unsigned long> _gpsDelay;
+extern PersistentGATT<unsigned long> _motionDelay;
 
 // #include HTTPSSender.h
 #include "vmhttps.h"
@@ -34,11 +35,17 @@ ApplicationManager::ApplicationManager()
   , _networkIsReady(false)
   , _bleTimeout(0)
   , _watchdog(-1)
+  , _activityInterrupt(NULL)
+  , _powerState(true)
+  , _gsmPoweredOn(false)
+  , _idleTimeout(0)
 {
 //	_logitPtr = [&] (void) { return go(); };
 //	_mqttConnectPtr = [&] (VM_TIMER_ID_NON_PRECISE timer_id) { mqttConnect(timer_id); };
 //	_resolvedPtr = [&] (char *host) { _hostIP = host; vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_mqttConnectPtr); };
 	_logitPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { logit(tid); };
+	_powerOnPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { powerOnComplete(tid); };
+	_idleMotionPtr = [&] (VM_TIMER_ID_NON_PRECISE tid) { vm_timer_delete_non_precise(tid); _powerState = 0; toggleSleep(); };
 	_resolvedPtr = [&] (char *host) { _hostIP = host; mqttInit(); };
 	_networkReadyPtr = [&] (void) { _network.resolveHost((VMSTR) _aioServer.getString(), _resolvedPtr); };
 
@@ -162,7 +169,16 @@ ApplicationManager::mqttInit()
 {
 	vm_log_debug("using native adafruit connection to connect to %s", _hostIP);
 
-	_portal = new MQTTnative(_hostIP,(const char *) _aioUsername.getString(), (const char *)_aioKey.getString(), _mqttPort.getValue());
+	// this will leak _portal on subsequent poweroff/on situations
+	if (! _portal)
+	{
+		_portal = new MQTTnative(_hostIP,(const char *) _aioUsername.getString(), (const char *)_aioKey.getString(), _mqttPort.getValue());
+	}
+	else
+	{
+		vm_log_info("reusing existing portal and previous connection info");
+	}
+
 	_portal->setTimeout(15001);
 	_locationTopic = _portal->topicHandle("l");
 	// contains calls which must be made using LTask-like facility (use std::functional) else random disconnections
@@ -211,8 +227,32 @@ ApplicationManager::enableBLE()
 }
 
 void
+ApplicationManager::powerOnComplete(VM_TIMER_ID_NON_PRECISE tid)
+{
+	vm_log_info("in powerOnComplete");
+
+	if (_gsmPoweredOn)
+	{
+		vm_log_info("ready to go");
+		VM_RESULT r = vm_timer_delete_non_precise(tid);
+		_gsmPoweredOn = false;
+		vm_log_info("scheduling gsm to re-enable");
+		vm_gsm_gprs_switch_mode(1);
+		_network.simStatus();
+		// probably call activate() instead to wake everything up?
+		_network.enable(_networkReadyPtr, (const char *)_apn.getString(), (const char *)_proxyIP.getString(), _proxyPort.getValue() != 0, _proxyPort.getValue());
+		_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	}
+}
+
+void
 ApplicationManager::start()
 {
+	VM_THREAD_HANDLE mainThread = vm_thread_get_main_handle();
+	VM_THREAD_HANDLE myThread = vm_thread_get_current_handle();
+	vm_log_info("threads: main is %d, my is %d", mainThread, myThread);
+
+	_blinker.start();
 //#define DO_HE_BITE  // as of 2016-05 2502 firmware fails after a fixed number of watchdog resets, so behavior is broken
 #ifdef DO_HE_BITE
 	_watchdog = vm_wdt_start(8000); // ~250 ticks/second, ~32s
@@ -238,6 +278,40 @@ ApplicationManager::start()
 }
 
 void
+ApplicationManager::motionChanged(const bool level)
+{
+	vm_log_info("application motion changed. is now: '%s'", level ? "static" : "moving");
+
+	if (level)
+	{
+		if (_motionDelay.getValue())
+		{
+			vm_log_info("if no activity within %d ms will go to sleep", _motionDelay.getValue());
+			_idleTimeout = vm_timer_create_non_precise(_motionDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_idleMotionPtr);
+		}
+		else
+		{
+			vm_log_info("motion delay set to zero; no sleeping scheduled");
+		}
+	}
+	else
+	{
+		if (_idleTimeout)
+		{
+			vm_log_info("activity resumed; cancelling timer %d", _idleTimeout);
+			vm_timer_delete_non_precise(_idleTimeout);
+			_idleTimeout = 0;
+
+			if (! _powerState)
+			{
+				_powerState = 1;
+				toggleSleep();
+			}
+		}
+	}
+}
+
+void
 ApplicationManager::activate()
 {
 	if (_bleTimeout)
@@ -247,6 +321,15 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
+	_motionTracker.start();
+	_motionTracker.schedule(5000);
+	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);
+	// map int1 pin to accelerometer interrupt; goes high when not moving
+	std::function<void(const unsigned int pin, const bool level)> interruptHook = [&] (const unsigned int pin, const bool level) { motionChanged(level); };
+	_activityInterrupt = new InterruptMapper(VM_PIN_P0, false, 100, false, true);
+	_activityInterrupt->setHook(interruptHook);
+	_activityInterrupt->enable();
+
 	//#define USE_HTTP
 #ifdef USE_HTTP
 	_blinker.change(LEDBlinker::white, 3000, 3000, 1024);
@@ -273,5 +356,45 @@ ApplicationManager::activate()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-	vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+	_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+}
+
+void
+ApplicationManager::gsmPowerChanged(VMBOOL success)
+{
+	vm_log_info("power switch success is %d, power state has switched to %s", success, _powerState ? "enabled" : "disabled");
+	_gsmPoweredOn = _powerState;
+}
+
+void
+ApplicationManager::buttonRelease()
+{
+	_powerState = 1 - _powerState;
+	toggleSleep();
+}
+
+void
+ApplicationManager::toggleSleep()
+{
+	if (! _powerState)
+	{
+		vm_log_info("no more logit");
+		vm_timer_delete_non_precise(_logitTimer);
+
+		vm_log_info("closing connections");
+		_portal->disconnect();
+		_motionTracker.pause();
+		_blinker.change(LEDBlinker::red, 2000, 500, 3);
+	}
+	else
+	{
+		// ::gsmPowerChanged() should be the place to start everything to start, but as of 2016-06-26 mediatek
+		// firmware has a bug; any activity in that callback (including a scheduled timer) executes in the wrong
+		// processId and or context, and fails.  instead, schedule a timer in this thread, which is safe, to go off
+		// once ApplicationManager is an active object (TimedTask) this can be replaced with a signal wait/post
+		vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_powerOnPtr);
+		_motionTracker.resume();
+		_blinker.change(LEDBlinker::green, 2000, 500, 3);
+	}
+	_network.switchPower(_powerState);
 }

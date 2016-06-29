@@ -2,6 +2,8 @@
 #include "GSMNetwork.h"
 #include "vmsystem.h"
 #include "vmgsm_gprs.h"
+#include "vmgsm.h"
+#include "vmpwr.h"
 #include "vmlog.h"
 #include "ObjectCallbacks.h"
 #include "vmstdlib.h"
@@ -41,11 +43,13 @@ void GSMNetwork::bearerCallback(VM_BEARER_HANDLE handle, VM_BEARER_STATE event, 
 		switch (event)
 		{
 		case VM_BEARER_DEACTIVATED:
+			vm_log_info("bearer %d deactivated", handle);
 			break;
 		case VM_BEARER_ACTIVATING:
 			break;
 		case VM_BEARER_ACTIVATED:
 		{
+			vm_log_info("bearer %d activated", handle);
 			//VM_RESULT ret = vm_gsm_gprs_hold_bearer(VM_GSM_GPRS_HANDLE_TYPE_TCP, handle);
 			//vm_log_info("bearer is activated, hold = %d", ret);
 			_isEnabled = true;
@@ -86,6 +90,9 @@ GSMNetwork::enable(std::function<void (void)> callback, const char *apn, const c
 		return false;
 	}
 	_enabledCallback = callback;
+
+	vm_log_info("setting apn");
+	// fix: check status?
 	VMINT status = setAPN(apn, proxy, useProxy, proxyPort);
 	vm_log_info("setAPN returns %d", status);
 	_bearerHandle = vm_bearer_open(VM_BEARER_DATA_ACCOUNT_TYPE_GPRS_CUSTOMIZED_APN, &_bearerCallbackPtr,
@@ -98,7 +105,31 @@ GSMNetwork::enable(std::function<void (void)> callback, const char *apn, const c
 const VM_RESULT
 GSMNetwork::disable()
 {
-	return vm_gsm_gprs_release_bearer();
+	if (_isEnabled)
+	{
+		_isEnabled = false;
+		// use vm_gsm_gprs_switch_mode to turn off after bearer callback released, before power shutoff?
+		return vm_gsm_gprs_release_bearer();
+	}
+}
+
+// located in main.cpp, with other non-"void *user_data" callbacks
+extern void powerChangeComplete(VMBOOL);
+
+void
+GSMNetwork::switchPower(const bool onOff)
+{
+	if (! onOff)
+	{
+		// block until bearer complete before switching off?
+		disable();
+		_isEnabled = false;
+		vm_gsm_cell_close();
+		vm_gsm_gprs_switch_mode(0);
+	}
+	VMBOOL switchStatus = vm_gsm_switch_mode(onOff, powerChangeComplete);
+	vm_log_info("turning GSM power %s, status of switch is %d", onOff ? "on" : "off", switchStatus);
+	// powerChangeComplete(true);
 }
 
 VM_RESULT GSMNetwork::dnsCallback(VM_DNS_HANDLE handle, vm_dns_result_t *result)
@@ -143,6 +174,7 @@ GSMNetwork::queryCellInfo(const towerAttributes which)
 {
 	vm_log_info("queryCellInfo hook: %d", which);
 	vm_gsm_cell_info_t info; /* cell information data */
+	memset(&info, 0, sizeof(info));
 	vm_gsm_cell_get_current_cell_info(&info);
 
 	switch (which)
@@ -163,6 +195,7 @@ void
 GSMNetwork::updateCellLocation()
 {
 	vm_gsm_cell_info_t info; /* cell information data */
+	memset(&info, 0, sizeof(info));
 	vm_gsm_cell_get_current_cell_info(&info);
 
 	sprintf((VMSTR)_towerLocation, (VMCSTR)"%d;%d;%d;%d", info.mcc, info.mnc, info.lac, info.ci);

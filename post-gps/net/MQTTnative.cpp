@@ -173,6 +173,9 @@ void MQTTnative::connect()
 
 	vm_log_info("Connecting to MQTT... ");
 
+	// remove iterative connection magic from this method;
+	// move up to caller, where caller can recreate the bearer and then re-call connect()
+	// rather than leaving responsibilty of application failure to this method
 	uint8_t retries = 3;
 	while ((ret = _mqtt.connect()) != 0)
 	{ // connect will return 0 for connected
