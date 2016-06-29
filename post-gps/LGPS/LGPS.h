@@ -146,6 +146,23 @@
 #define GPS_MODE2_ID			13 // 1,2,3
 #define GPS_MODE2_SIZE			1 // 1 byte
 
+#define GPS_GPRMC_ID			15
+#define GPS_GPRMC_SIZE			75
+
+#define GPS_GPVTG_ID			16
+#define GPS_GPVTG_SIZE			75
+
+#define GPS_GPGGA_ID			17
+#define GPS_GPGGA_SIZE			75
+
+#define GPS_GPGSA_ID			18
+#define GPS_GPGSA_SIZE			75
+
+#define GPS_GPGSV_ID			19
+#define GPS_GPGSV_SIZE			75
+
+#define GPS_GPGLL_ID			20
+#define GPS_GPGLL_SIZE			75
 
 class LGPSClass : public _LTaskClass
 {
@@ -160,6 +177,14 @@ public:
 	 *
 	 */
 	unsigned char check_online(void);
+
+	const char *get_sentence(char *data, const unsigned short);
+	const char *get_gprmc(void);
+	const char *get_gpvtg(void);
+	const char *get_gpgga(void);
+	const char *get_gpgsa(void);
+	const char *get_gpgsv(void);
+	const char *get_gpgll(void);
 
 	/**
 	 *  \brief Get the utc date and time.

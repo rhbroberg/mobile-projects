@@ -143,6 +143,74 @@ unsigned char LGPSClass::get_ns(void)
     else return data[2] = '-';
 }
 
+#include "vmlog.h"
+
+const char *
+LGPSClass::get_sentence(char *data, const unsigned short which)
+{
+	unsigned char i;
+
+	Wire.begin();
+	Wire.beginTransmission(GPS_DEVICE_ADDR);
+	Wire.write(which);
+	Wire.endTransmission();
+	vm_log_info("i2c: endTransmission");
+
+	for (i=0;i<(GPS_GPRMC_SIZE+2);i++)
+	{
+		Wire.requestFrom(GPS_DEVICE_ADDR, 1);
+		while (Wire.available())
+		{
+			*(data + i) = Wire.read();
+		}
+	}
+
+	return data + 2;
+}
+
+const char *
+LGPSClass::get_gprmc()
+{
+	static char data[GPS_GPRMC_SIZE+2];
+	return get_sentence(data, GPS_GPRMC_ID);
+}
+
+const char *
+LGPSClass::get_gpvtg(void)
+{
+	static char data[GPS_GPRMC_SIZE+2];
+	return get_sentence(data, GPS_GPVTG_ID);
+}
+
+const char *
+LGPSClass::get_gpgga(void)
+{
+	static char data[GPS_GPRMC_SIZE+2];
+	return get_sentence(data, GPS_GPGGA_ID);
+}
+
+const char *
+LGPSClass::get_gpgsa(void)
+{
+	static char data[GPS_GPRMC_SIZE+2];
+	return get_sentence(data, GPS_GPGSA_ID);
+}
+
+const char *
+LGPSClass::get_gpgsv(void)
+{
+	static char data[GPS_GPRMC_SIZE+2];
+	return get_sentence(data, GPS_GPGSV_ID);
+}
+
+const char *
+LGPSClass::get_gpgll(void)
+{
+	static char data[GPS_GPRMC_SIZE+2];
+	return get_sentence(data, GPS_GPGLL_ID);
+}
+
+
 float LGPSClass::get_longitude(void)
 {
 	unsigned char data[GPS_LONGITUDE_SIZE+2];

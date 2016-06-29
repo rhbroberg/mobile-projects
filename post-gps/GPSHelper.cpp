@@ -65,6 +65,7 @@ GPSHelper::sample()
 	unsigned char *utc_date_time = 0;
 	bool status;
 
+#ifdef NOPE
 	if (status = LGPS.check_online())
 	{
 		utc_date_time = LGPS.get_utc_date_time();
@@ -80,4 +81,21 @@ GPSHelper::sample()
 		vm_log_info("gps not online yet");
 	}
 	return status ? (LGPS.get_sate_used() > 0) : false; // ridiculous check, but this gps library doesn't let me query if data is valid
+#endif
+
+	vm_log_info("about to get sentences");
+	const char *rmc = LGPS.get_gprmc();
+	vm_log_info("got rmc: '%s'", rmc);
+	const char *vtg = LGPS.get_gpvtg();
+	vm_log_info("got vtg: '%s'", vtg);
+	const char *gga = LGPS.get_gpgga();
+	vm_log_info("got gga: '%s'", gga);
+	const char *gsa = LGPS.get_gpgsa();
+	vm_log_info("got gsa: '%s'", gsa);
+	const char *gsv = LGPS.get_gpgsv();
+	vm_log_info("got gsv: '%s'", gsv);
+	const char *gll = LGPS.get_gpgll();
+	vm_log_info("got gll: '%s'", gll);
+
+	return false;
 }
