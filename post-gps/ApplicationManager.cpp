@@ -321,8 +321,10 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
+#ifdef NOT_NOW
 	_motionTracker.start();
 	_motionTracker.schedule(5000);
+#endif
 	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);
 	// map int1 pin to accelerometer interrupt; goes high when not moving
 	std::function<void(const unsigned int pin, const bool level)> interruptHook = [&] (const unsigned int pin, const bool level) { motionChanged(level); };
@@ -369,8 +371,13 @@ ApplicationManager::gsmPowerChanged(VMBOOL success)
 void
 ApplicationManager::buttonRelease()
 {
+#ifdef HACK
 	_powerState = 1 - _powerState;
 	toggleSleep();
+#else
+	vm_log_info("pushing gps string");
+	_gps.write("$PMTK314,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0*2D");
+#endif
 }
 
 void

@@ -164,6 +164,8 @@
 #define GPS_GPGLL_ID			20
 #define GPS_GPGLL_SIZE			75
 
+#define GPS_COMMAND_ID			21
+
 class LGPSClass : public _LTaskClass
 {
 public:
@@ -177,6 +179,8 @@ public:
 	 *
 	 */
 	unsigned char check_online(void);
+
+	void write(const char *command);
 
 	const char *get_sentence(char *data, const unsigned short);
 	const char *get_gprmc(void);

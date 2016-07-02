@@ -59,6 +59,12 @@ GPSHelper::createLocationMsg(const char *format, VMSTR message, const int rxLeve
 	return result;
 }
 
+void
+GPSHelper::write(const char *command)
+{
+	LGPS.write(command);
+}
+
 const bool
 GPSHelper::sample()
 {

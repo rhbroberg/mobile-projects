@@ -11,6 +11,7 @@ public:
 	const bool updateRTC();
 	const bool createLocationMsg(const char *format, VMSTR message, const int rxLevel);
 	const bool sample();
+	void write(const char *command);
 
 protected:
 	bool _isSet;

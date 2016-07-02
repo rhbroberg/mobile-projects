@@ -145,6 +145,31 @@ unsigned char LGPSClass::get_ns(void)
 
 #include "vmlog.h"
 
+void
+LGPSClass::write(const char *command)
+{
+	vm_log_info("sending command '%s' to gps", command);
+	// $PMTK314,1,1,1,1,5,0,0,0,0,0,0,0,0,0,0,0,1,0*2D<CR><LF>
+	char withEndings[32];
+	memset(withEndings, 0, 32);
+	memcpy(withEndings, command, strlen(command));
+
+	Wire.begin();
+	Wire.beginTransmission(GPS_DEVICE_ADDR);
+	Wire.write(GPS_COMMAND_ID);
+#ifdef DUMB
+	for (unsigned i = 0; i < strlen(withEndings); i++)
+	{
+		Wire.write(withEndings[i]);
+		vm_log_info("wrote char '%c'", withEndings[i]);
+	}
+#else
+	Wire.write(withEndings, 32);
+#endif
+	Wire.endTransmission();
+	vm_log_info("i2c: endTransmission");
+}
+
 const char *
 LGPSClass::get_sentence(char *data, const unsigned short which)
 {
