@@ -262,6 +262,7 @@ ApplicationManager::start()
 	// must retrieve status at least once for gatt characteristics to be valid;
 	_network.simStatus();
 
+	_gps.start();
 	// allow bluetooth bootstrapping configuration
 	_config.start();  // have to split starting eeprom from ble, else ble can't retrieve server name.  currently coupled
 	_config.mapEEPROM();
@@ -321,6 +322,7 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
+//#define NOT_NOW
 #ifdef NOT_NOW
 	_motionTracker.start();
 	_motionTracker.schedule(5000);
@@ -358,7 +360,9 @@ ApplicationManager::activate()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
+#ifdef NOT_NOW
 	_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
+#endif
 }
 
 void
@@ -376,7 +380,8 @@ ApplicationManager::buttonRelease()
 	toggleSleep();
 #else
 	vm_log_info("pushing gps string");
-	_gps.write("$PMTK314,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0*2D");
+	_gps.write("$PMTK314,1,1,1,1,5,0,0,0,0,0,0,0,0,0,0,0,1,0*2D\r\n");
+//	_gps.write("$PMTK161,0*28\r\n");
 #endif
 }
 
