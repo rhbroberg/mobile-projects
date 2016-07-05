@@ -187,6 +187,7 @@ ApplicationManager::mqttInit()
 	_networkIsReady = true;
 
 	_blinker.change(LEDBlinker::white, 100, 100, 5, true);
+	_gps.start();
 }
 
 #include "vmfirmware.h"
@@ -262,7 +263,6 @@ ApplicationManager::start()
 	// must retrieve status at least once for gatt characteristics to be valid;
 	_network.simStatus();
 
-	_gps.start();
 	// allow bluetooth bootstrapping configuration
 	_config.start();  // have to split starting eeprom from ble, else ble can't retrieve server name.  currently coupled
 	_config.mapEEPROM();

@@ -3,8 +3,9 @@
 
 #include "vmtype.h"
 #include "vmdcl_sio.h"
+#include "TimedTask.h"
 
-class GPSHelper
+class GPSHelper : public TimedTask
 {
 public:
 	GPSHelper();
@@ -14,10 +15,12 @@ public:
 	const bool sample();
 	void write(const char *command);
 	const char *read();
-	void start();
-	void enable();
 
 protected:
+	virtual const bool setup();
+	virtual void loop();
+	virtual void pauseHook();
+	virtual void resumeHook();
 	void initUART();
 
 	bool _isSet;

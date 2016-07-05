@@ -10,22 +10,11 @@
 GPSHelper *This = NULL;
 
 GPSHelper::GPSHelper()
-  :	_isSet(false)
+  :	TimedTask("GPS")
+  , _isSet(false)
   , _uart(VM_DCL_HANDLE_INVALID)
 {
 	This = this;
-}
-
-void
-GPSHelper::start()
-{
-	initUART();
-}
-
-void
-GPSHelper::enable()
-{
-	initUART();
 }
 
 const bool
@@ -124,21 +113,6 @@ GPSHelper::sample()
 	}
 	return status ? (LGPS.get_sate_used() > 0) : false; // ridiculous check, but this gps library doesn't let me query if data is valid
 #endif
-#ifdef MORE_NOPE
-	vm_log_info("about to get sentences");
-	const char *rmc = LGPS.get_gprmc();
-	vm_log_info("got rmc: '%s'", rmc);
-	const char *vtg = LGPS.get_gpvtg();
-	vm_log_info("got vtg: '%s'", vtg);
-	const char *gga = LGPS.get_gpgga();
-	vm_log_info("got gga: '%s'", gga);
-	const char *gsa = LGPS.get_gpgsa();
-	vm_log_info("got gsa: '%s'", gsa);
-	const char *gsv = LGPS.get_gpgsv();
-	vm_log_info("got gsv: '%s'", gsv);
-	const char *gll = LGPS.get_gpgll();
-	vm_log_info("got gll: '%s'", gll);
-#endif
 	return false;
 }
 
@@ -152,7 +126,7 @@ GPSHelper::read()
     memset(data, 0, sizeof(data));
 
     status = vm_dcl_read(_uart, (VM_DCL_BUFFER *) data, sizeof(data) - 1, &returned_len, vm_dcl_get_owner_id());
-	vm_log_info("status: %d; read %d bytes: '%s'", status, returned_len, data);
+    //	vm_log_info("status: %d; read %d bytes: '%s'", status, returned_len, data);
 	while (returned_len == (sizeof(data) - 1))
 	{
 		vm_log_info("buffer overrun?");
@@ -162,14 +136,17 @@ GPSHelper::read()
     return (const char *) data;
 }
 
+// extend InterruptMapper to do this instead
 void
 uart_irq_handler(void *parameter, VM_DCL_EVENT event, VM_DCL_HANDLE device_handle)
 {
-	// vm_log_info("device handle is %x, uart is %x", device_handle, This->_uart);
+	vm_dcl_callback_data_t *foo = (vm_dcl_callback_data_t *) parameter;
+	vm_log_info("device handle is %x, p - %x, t - %x, %x, %x", device_handle, parameter, This,
+			foo->local_parameters, foo->peer_buffer);
 
 	if (event == VM_DCL_SIO_UART_READY_TO_READ)
     {
-    	This->read();
+		This->wakeup();
     }
 }
 
@@ -206,6 +183,31 @@ GPSHelper::initUART()
 		config.config.sw_xon_char = 0x11;
 
 		vm_dcl_control(_uart, VM_DCL_SIO_COMMAND_SET_DCB_CONFIG, (void *) &config);
-		vm_dcl_register_callback(_uart, VM_DCL_SIO_UART_READY_TO_READ, (vm_dcl_callback)uart_irq_handler, (void *) NULL);
+		vm_dcl_register_callback(_uart, VM_DCL_SIO_UART_READY_TO_READ, (vm_dcl_callback) uart_irq_handler, (void *) this);
 	}
+}
+
+const bool
+GPSHelper::setup()
+{
+	initUART();
+}
+
+void
+GPSHelper::loop()
+{
+	const char *str = read();
+	vm_log_info("loop read %d bytes: '%s'", strlen(str), str);
+}
+
+void
+GPSHelper::pauseHook()
+{
+
+}
+
+void
+GPSHelper::resumeHook()
+{
+
 }
