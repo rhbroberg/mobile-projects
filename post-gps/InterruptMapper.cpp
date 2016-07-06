@@ -28,9 +28,9 @@ InterruptMapper::setHook(std::function<void(const unsigned int, const bool)> hoo
 const bool
 InterruptMapper::level()
 {
-	vm_dcl_gpio_control_level_status_t gpio_input_data;  // parameter for VM_DCL_GPIO_COMMAND_READ.
-	VM_DCL_HANDLE gpio_handle = vm_dcl_open(VM_DCL_GPIO, _pin);          // First, we call vm_dcl_open to get a handle. 55 means gpio55
-	vm_dcl_control(gpio_handle, VM_DCL_GPIO_COMMAND_READ, (void *)&gpio_input_data);   // We call vm_dcl_control to read gpio55.
+	vm_dcl_gpio_control_level_status_t gpio_input_data;
+	VM_DCL_HANDLE gpio_handle = vm_dcl_open(VM_DCL_GPIO, _pin);
+	vm_dcl_control(gpio_handle, VM_DCL_GPIO_COMMAND_READ, (void *) &gpio_input_data);
 
     vm_dcl_close(gpio_handle);
     return (gpio_input_data.level_status == VM_DCL_GPIO_IO_HIGH) ? true : false;
@@ -39,7 +39,6 @@ InterruptMapper::level()
 void
 InterruptMapper::autoPolarity(const bool polarity)
 {
-	// VM_DCL_EINT_COMMAND_SET_AUTO_CHANGE_POLARITY
 	vm_dcl_eint_control_auto_change_polarity_t autome;
 	autome.auto_change_polarity = polarity ? 1 : 0;
 

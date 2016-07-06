@@ -87,7 +87,7 @@ TimedTask::go()
 {
 	_running = true;
 
-	vm_log_info("task %s, online", _name);
+	vm_log_info("task '%s' online", _name);
 	setup();
 
 	while (_running)

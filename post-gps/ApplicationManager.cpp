@@ -8,7 +8,7 @@
 #include "vmgsm_gprs.h"
 #include "vmpwr.h"
 #include "ObjectCallbacks.h"
-#include "LGPS.h"
+
 #include "PersistentGATT.h"
 #include "PersistentGATTByte.h"
 #include "UUIDs.h"
@@ -117,10 +117,10 @@ ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 	}
 
 	// blinky status lights change in this block
-	if ((_gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
+	if ((_gps.createLocationMsg("%f;%f;%f;%f;%f;%c;%d;%d",
 			_locationStatus, _network.simStatus())))
 	{
-		vm_log_info("gps data is available");
+		vm_log_info("gps data is available and updated");
 
 		if (_portal && _portal->ready())
 		{
@@ -322,11 +322,8 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
-//#define NOT_NOW
-#ifdef NOT_NOW
 	_motionTracker.start();
 	_motionTracker.schedule(5000);
-#endif
 	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);
 	// map int1 pin to accelerometer interrupt; goes high when not moving
 	std::function<void(const unsigned int pin, const bool level)> interruptHook = [&] (const unsigned int pin, const bool level) { motionChanged(level); };
@@ -360,9 +357,7 @@ ApplicationManager::activate()
 	}
 
 //	_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_logitPtr, 127);
-#ifdef NOT_NOW
 	_logitTimer = vm_timer_create_non_precise(_gpsDelay.getValue(), ObjectCallbacks::timerNonPrecise, &_logitPtr);
-#endif
 }
 
 void
@@ -375,14 +370,8 @@ ApplicationManager::gsmPowerChanged(VMBOOL success)
 void
 ApplicationManager::buttonRelease()
 {
-#ifdef HACK
 	_powerState = 1 - _powerState;
 	toggleSleep();
-#else
-	vm_log_info("pushing gps string");
-	_gps.write("$PMTK314,1,1,1,1,5,0,0,0,0,0,0,0,0,0,0,0,1,0*2D\r\n");
-//	_gps.write("$PMTK161,0*28\r\n");
-#endif
 }
 
 void
@@ -396,6 +385,7 @@ ApplicationManager::toggleSleep()
 		vm_log_info("closing connections");
 		_portal->disconnect();
 		_motionTracker.pause();
+		_gps.pause();
 		_blinker.change(LEDBlinker::red, 2000, 500, 3);
 	}
 	else
@@ -406,6 +396,7 @@ ApplicationManager::toggleSleep()
 		// once ApplicationManager is an active object (TimedTask) this can be replaced with a signal wait/post
 		vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_powerOnPtr);
 		_motionTracker.resume();
+		_gps.resume();
 		_blinker.change(LEDBlinker::green, 2000, 500, 3);
 	}
 	_network.switchPower(_powerState);
