@@ -187,7 +187,6 @@ ApplicationManager::mqttInit()
 	_networkIsReady = true;
 
 	_blinker.change(LEDBlinker::white, 100, 100, 5, true);
-	_gps.start();
 }
 
 #include "vmfirmware.h"
@@ -322,6 +321,7 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
+	_gps.start();
 	_motionTracker.start();
 	_motionTracker.schedule(5000);
 	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);

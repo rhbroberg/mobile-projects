@@ -21,6 +21,7 @@ protected:
 	virtual void loop();
 	virtual void pauseHook();
 	virtual void resumeHook();
+	virtual void startHook();
 
 	TinyGPSPlus _gps;
 	bool _isSet;

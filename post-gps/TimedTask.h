@@ -26,6 +26,7 @@ protected:
 	virtual void loop() = 0;
 	virtual void pauseHook();
 	virtual void resumeHook();
+	virtual void startHook();
 
 	const char *_name;
 	VMBOOL _running, _persistentTimer;

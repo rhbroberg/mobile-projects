@@ -45,6 +45,7 @@ Uart::init()
 		config.config.sw_xon_char = 0x11;
 
 		vm_dcl_control(_uart, VM_DCL_SIO_COMMAND_SET_DCB_CONFIG, (void *) &config);
+		vm_log_info("registering callback for device %x", _uart);
 		vm_dcl_register_callback(_uart, VM_DCL_SIO_UART_READY_TO_READ, (vm_dcl_callback) Uart::triggered, NULL);
 	}
 }
@@ -57,7 +58,7 @@ Uart::read(char *buf, const unsigned long len)
     memset(buf, 0, len);
 
     status = vm_dcl_read(_uart, (VM_DCL_BUFFER *) buf, len - 1, &sent, vm_dcl_get_owner_id());
-    //	vm_log_info("status: %d; read %d bytes: '%s'", status, sent, data);
+    // vm_log_info("status: %d; read %d bytes: '%s'", status, sent, buf);
 
     return sent == (len - 1);
 }
@@ -93,7 +94,7 @@ Uart::setHook(std::function<void(void)> hook)
 void
 Uart::triggered(void *user_data, VM_DCL_EVENT event, VM_DCL_HANDLE device_handle)
 {
-    // vm_log_info("interrupt: device = %x", device_handle);
+	// vm_log_info("interrupt: device = %x, event is %d", device_handle, event);
 
     // call lambda if defined
     if ((_instance->_interruptHook) && (event == VM_DCL_SIO_UART_READY_TO_READ))
