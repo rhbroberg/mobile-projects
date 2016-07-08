@@ -49,8 +49,6 @@ InterruptMapper::autoPolarity(const bool polarity)
 	}
 }
 
-vm_dcl_callback_data_t wtf;
-
 void
 InterruptMapper::enable()
 {
@@ -84,9 +82,6 @@ InterruptMapper::enable()
 	}
 
 	/* Registers the EINT callback */
-	wtf.local_parameters = 0;
-	wtf.peer_buffer = 0;
-	vm_log_info("this is %x, p %x, b %x", (void *)this, (void *) &(wtf.local_parameters), &(wtf.peer_buffer));
 	vm_log_info("device handle is %x", _pinHandle);
 
 	status = vm_dcl_register_callback(_pinHandle, VM_DCL_EINT_EVENT_TRIGGER, InterruptMapper::triggered, NULL);
@@ -154,13 +149,7 @@ InterruptMapper::pin() const
 void
 InterruptMapper::triggered(void *user_data, VM_DCL_EVENT event, VM_DCL_HANDLE device_handle)
 {
-	static VMUINT g_count = 0;
-	vm_dcl_callback_data_t *mywtf = (vm_dcl_callback_data_t *)user_data;
-
-	if (g_count>10000)
-		g_count = 0;
-
-    vm_log_info("interrupt: device = %x, count = %d", device_handle, ++g_count);
+    vm_log_info("interrupt: device = %x", device_handle);
 
     // no lambda-style callback works here; vm_dcl_register_callback() firmware is broken (as of 2016-06-08) and does
     // not allow passing of 'void * user_data' like all other callbacks in system.  Use a static map in a static method
