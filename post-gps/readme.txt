@@ -1,6 +1,26 @@
-This example connects to HTTP(not HTTPS) to retrieve index.html from labs.mediatek.com and print to vm_log.
+Code for 2502a (rephone) processor to be gps/activity tracker.
 
-It calls the API vm_https_register_context_and_callback() to register the callback functions, then set the channel by vm_https_set_channel(). After the channel is established, it will send out the request by vm_https_send_request() and read the response by vm_https_read_content().
+Requires following hardware:
+- rephone board
+- LIS3DH Adafruit board
+- xadow gps/v2 board
+- SIM card
+- LiPO/Li-ion battery
 
-You can change the url by modify macro VMHTTPS_TEST_URL.
-Before run this example, please set the APN information first by modify macros.
+This project posts gps location and other telemetry information to the Adafruit mqtt server via GSM.  
+Intial configuration is done via BLE. 
+Accelerometer support provides both sampling data as well as sleep mode for inactvity.
+
+Current draw is around 20mA in sleep mode.
+
+Third party libraries include:
+- adafruit mqtt
+- adafruit accelerometer (LIS3DH)
+- TinyGPS++
+
+Code is in c++, uses standard c++ library.  Yes, I'm aware that using it adds 100k to my project.  No, I don't mind that at all - the part has ~1M available for me to use so I'm going to use it.
+(Projects using the rephone which utilize the hardware touchscreen load 100k worth of fonts and nobody complains about that).  Being able to use lamdas to wrap the myriad callback methods instead of stub functions everywhere is a big plus.
+
+Any uart-based GPS should work for basic NMEA sentences; the extended sentences and commands (e.g., sleep mode) will likely be different.
+
+Contributions welcome
