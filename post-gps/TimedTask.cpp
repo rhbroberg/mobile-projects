@@ -46,8 +46,8 @@ TimedTask::start()
 	{
 		vm_log_info("task '%s' starting", _name);
 
-		_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_goPtr, 100);
-		wakeup();
+		startHook();
+		_thread = vm_thread_create(ObjectCallbacks::threadEntry, (void *) &_goPtr, 10);
 	}
 	else
 	{
@@ -87,7 +87,7 @@ TimedTask::go()
 {
 	_running = true;
 
-	vm_log_info("task %s, online", _name);
+	vm_log_info("task '%s' online", _name);
 	setup();
 
 	while (_running)
@@ -117,6 +117,12 @@ TimedTask::resume()
 {
 	schedule(_loopDelay);
 	resumeHook();
+}
+
+void
+TimedTask::startHook()
+{
+
 }
 
 void

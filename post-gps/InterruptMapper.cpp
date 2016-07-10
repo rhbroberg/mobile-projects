@@ -28,9 +28,9 @@ InterruptMapper::setHook(std::function<void(const unsigned int, const bool)> hoo
 const bool
 InterruptMapper::level()
 {
-	vm_dcl_gpio_control_level_status_t gpio_input_data;  // parameter for VM_DCL_GPIO_COMMAND_READ.
-	VM_DCL_HANDLE gpio_handle = vm_dcl_open(VM_DCL_GPIO, _pin);          // First, we call vm_dcl_open to get a handle. 55 means gpio55
-	vm_dcl_control(gpio_handle, VM_DCL_GPIO_COMMAND_READ, (void *)&gpio_input_data);   // We call vm_dcl_control to read gpio55.
+	vm_dcl_gpio_control_level_status_t gpio_input_data;
+	VM_DCL_HANDLE gpio_handle = vm_dcl_open(VM_DCL_GPIO, _pin);
+	vm_dcl_control(gpio_handle, VM_DCL_GPIO_COMMAND_READ, (void *) &gpio_input_data);
 
     vm_dcl_close(gpio_handle);
     return (gpio_input_data.level_status == VM_DCL_GPIO_IO_HIGH) ? true : false;
@@ -39,7 +39,6 @@ InterruptMapper::level()
 void
 InterruptMapper::autoPolarity(const bool polarity)
 {
-	// VM_DCL_EINT_COMMAND_SET_AUTO_CHANGE_POLARITY
 	vm_dcl_eint_control_auto_change_polarity_t autome;
 	autome.auto_change_polarity = polarity ? 1 : 0;
 
@@ -49,8 +48,6 @@ InterruptMapper::autoPolarity(const bool polarity)
 		vm_log_info("VM_DCL_EINT_COMMAND_SET_AUTO_CHANGE_POLARITY = %d", status);
 	}
 }
-
-vm_dcl_callback_data_t wtf;
 
 void
 InterruptMapper::enable()
@@ -85,9 +82,6 @@ InterruptMapper::enable()
 	}
 
 	/* Registers the EINT callback */
-	wtf.local_parameters = 0;
-	wtf.peer_buffer = 0;
-	vm_log_info("this is %x, p %x, b %x", (void *)this, (void *) &(wtf.local_parameters), &(wtf.peer_buffer));
 	vm_log_info("device handle is %x", _pinHandle);
 
 	status = vm_dcl_register_callback(_pinHandle, VM_DCL_EINT_EVENT_TRIGGER, InterruptMapper::triggered, NULL);
@@ -155,13 +149,7 @@ InterruptMapper::pin() const
 void
 InterruptMapper::triggered(void *user_data, VM_DCL_EVENT event, VM_DCL_HANDLE device_handle)
 {
-	static VMUINT g_count = 0;
-	vm_dcl_callback_data_t *mywtf = (vm_dcl_callback_data_t *)user_data;
-
-	if (g_count>10000)
-		g_count = 0;
-
-    vm_log_info("interrupt: device = %x, count = %d", device_handle, ++g_count);
+    vm_log_info("interrupt: device = %x", device_handle);
 
     // no lambda-style callback works here; vm_dcl_register_callback() firmware is broken (as of 2016-06-08) and does
     // not allow passing of 'void * user_data' like all other callbacks in system.  Use a static map in a static method

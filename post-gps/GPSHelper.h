@@ -1,19 +1,32 @@
-#ifndef GPSHelper_h
-#define GPSHelper_h
+#pragma once
 
+#include "vmsystem.h"
 #include "vmtype.h"
+#include "TimedTask.h"
+#include "Uart.h"
+#include "TinyGPS++.h"
 
-class GPSHelper
+class GPSHelper : public TimedTask
 {
 public:
 	GPSHelper();
 
 	const bool updateRTC();
 	const bool createLocationMsg(const char *format, VMSTR message, const int rxLevel);
-	const bool sample();
+	void write(const char *);
 
 protected:
-	bool _isSet;
-};
+	void feed();
+	virtual const bool setup();
+	virtual void loop();
+	virtual void pauseHook();
+	virtual void resumeHook();
+	virtual void startHook();
 
-#endif // GPSHelper_h
+	TinyGPSPlus _gps;
+	bool _isSet;
+	Uart _uart;
+    char _data[100];
+	vm_mutex_t _lock;
+
+};

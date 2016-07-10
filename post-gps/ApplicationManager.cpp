@@ -8,7 +8,7 @@
 #include "vmgsm_gprs.h"
 #include "vmpwr.h"
 #include "ObjectCallbacks.h"
-#include "LGPS.h"
+
 #include "PersistentGATT.h"
 #include "PersistentGATTByte.h"
 #include "UUIDs.h"
@@ -117,10 +117,10 @@ ApplicationManager::logit(VM_TIMER_ID_NON_PRECISE tid)
 	}
 
 	// blinky status lights change in this block
-	if ((_gps.createLocationMsg("%s%f;%s%f;%f;%f;%f;%c;%d;%d",
+	if ((_gps.createLocationMsg("%f;%f;%f;%f;%f;%c;%d;%d",
 			_locationStatus, _network.simStatus())))
 	{
-		vm_log_info("gps data is available");
+		vm_log_info("gps data is available and updated");
 
 		if (_portal && _portal->ready())
 		{
@@ -321,6 +321,7 @@ ApplicationManager::activate()
 	}
 
 	_config.disableBLE();
+	_gps.start();
 	_motionTracker.start();
 	_motionTracker.schedule(5000);
 	// const unsigned int pin, const bool direction, const unsigned int debounce, const bool sensitivity, const bool polarity);
@@ -384,6 +385,7 @@ ApplicationManager::toggleSleep()
 		vm_log_info("closing connections");
 		_portal->disconnect();
 		_motionTracker.pause();
+		_gps.pause();
 		_blinker.change(LEDBlinker::red, 2000, 500, 3);
 	}
 	else
@@ -394,6 +396,7 @@ ApplicationManager::toggleSleep()
 		// once ApplicationManager is an active object (TimedTask) this can be replaced with a signal wait/post
 		vm_timer_create_non_precise(1000, ObjectCallbacks::timerNonPrecise, &_powerOnPtr);
 		_motionTracker.resume();
+		_gps.resume();
 		_blinker.change(LEDBlinker::green, 2000, 500, 3);
 	}
 	_network.switchPower(_powerState);

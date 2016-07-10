@@ -38,11 +38,6 @@ public:
 	static void icciRetrieve(VMCHAR *iccid, void *user_data);
 
 	static VM_TIMER_ID_NON_PRECISE create_non_precise(VMUINT32 milliseconds, vm_timer_non_precise_callback timer_procedure, void* user_data);
-#ifdef WHY_ME
-	static void systemEvent(VMINT message, VMINT param);
-	static VMINT keypadEvent(VM_KEYPAD_EVENT event, VMINT code);
-	static void gsmPower(VMBOOL success);
-#endif
 
 };
 
