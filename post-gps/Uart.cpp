@@ -5,6 +5,7 @@
 #include "vmdcl_sio.h"
 #include "vmsystem.h"
 #include "string.h"
+#include "SysWrapper.h"
 
 Uart *Uart::_instance = NULL;
 
@@ -44,9 +45,14 @@ Uart::init()
 		config.config.sw_xoff_char = 0x13;
 		config.config.sw_xon_char = 0x11;
 
-		vm_dcl_control(_uart, VM_DCL_SIO_COMMAND_SET_DCB_CONFIG, (void *) &config);
 		vm_log_info("registering callback for device %x", _uart);
+#ifdef NOTYET
+		sysWrapper.dcl_control(_uart, VM_DCL_SIO_COMMAND_SET_DCB_CONFIG, (void *) &config);
+		sysWrapper.dcl_register_callback(_uart, VM_DCL_SIO_UART_READY_TO_READ, (vm_dcl_callback) Uart::triggered, NULL);
+#else
+		vm_dcl_control(_uart, VM_DCL_SIO_COMMAND_SET_DCB_CONFIG, (void *) &config);
 		vm_dcl_register_callback(_uart, VM_DCL_SIO_UART_READY_TO_READ, (vm_dcl_callback) Uart::triggered, NULL);
+#endif
 	}
 }
 

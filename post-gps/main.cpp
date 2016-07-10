@@ -115,13 +115,12 @@ void handle_sysevt(VMINT message, VMINT param)
 		break;
 
 		/* Special event for arduino application, when arduino thead need call LinkIt 2.0 inteface, it will use this event  */
-
 	case VM_MSG_ARDUINO_CALL:
 	{
-		vm_log_info("in rhb arduino call");
 		std::function<void()> *inMain = (std::function<void()> *) &param;
+		vm_log_info("in arduino call, user_data is %x", (void *)inMain);
 		(*inMain)();
-		vm_log_info("after rhb arduino call made in main");
+		vm_log_info("after arduino call made in main");
 		break;
 	}
 	}

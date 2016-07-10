@@ -87,6 +87,7 @@ GPSHelper::startHook()
 const bool
 GPSHelper::setup()
 {
+	// _uart.init();
 	// not safe to call _uart.init() here; some call is not safe to execute in non-main thread; once the call is wrapped this will be safe again
 	// until then, initialization lives in startHook()
 }
