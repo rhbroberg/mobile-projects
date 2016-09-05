@@ -82,6 +82,7 @@ void
 GPSHelper::startHook()
 {
 	_uart.init();
+	resumeHook();
 }
 
 const bool
@@ -131,5 +132,6 @@ void
 GPSHelper::resumeHook()
 {
 	vm_log_info("gps resuming");
-	write("$PMTK161,0*28\r\n");
+	// hot start for now; in the future, choose different start options based on elapsed time since put to sleep
+	write("$PMTK101*32\r\n");
 }
