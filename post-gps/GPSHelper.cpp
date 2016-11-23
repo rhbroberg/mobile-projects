@@ -106,7 +106,7 @@ GPSHelper::loop()
 void
 GPSHelper::feed()
 {
-	//vm_log_info("feeding %d bytes: '%s'", strlen(_data), _data);
+	// vm_log_info("feeding %d bytes: '%s'", strlen(_data), _data);
 
 	LockGuard g(&_lock);
 	for (unsigned int i = 0; i < strlen(_data); i++)
