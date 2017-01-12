@@ -145,7 +145,7 @@ void
 AppInfo::registerGATT(ConfigurationManager &configMgr)
 {
 	{
-		gatt::Service *_versionService = new gatt::Service(sim_service, true);
+		gatt::Service *_versionService = new gatt::Service(version_service, true);
 
 		gatt::StringCharacteristic *name = new gatt::StringCharacteristic(name_uuid,
 				VM_BT_GATT_CHAR_PROPERTY_READ, VM_BT_GATT_PERMISSION_READ, (char *)_name);

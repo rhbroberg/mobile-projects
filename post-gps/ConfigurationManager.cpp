@@ -29,7 +29,7 @@ PersistentGATT<unsigned long> _proxyPort("gsm.proxy.port", proxyPort_uuid,
 		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
 		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 80);
 
-PersistentGATTByte ApplicationManager::_aioServer("mqtt.aio.server", 32, aioServer_uuid,
+PersistentGATTByte ApplicationManager::_aioServer("mqtt.aio.server", 64, aioServer_uuid,
 		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
 		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, "io.adafruit.com");
 PersistentGATTByte ApplicationManager::_aioUsername("mqtt.aio.user", 16, aioUsername_uuid,
@@ -173,7 +173,7 @@ ConfigurationManager::mapEEPROM()
 {
 	// order matters here!  If you add a new object to the eeprom, it must go to the end of the list (and have a suitable default value)
 	// bind this to a BLE characteristic
-//	_eeprom->eraseAll();
+	// _eeprom->eraseAll();
 
 	_eeprom->add(&_frist);
 	_eeprom->add(&_second);
