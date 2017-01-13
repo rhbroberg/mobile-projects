@@ -2,6 +2,7 @@
 #include "UUIDs.h"
 
 #include "vmlog.h"
+#include "vmpwr.h"
 
 #include "gatt/ByteCharacteristic.h"
 #include "gatt/ByteHookCharacteristic.h"
@@ -12,10 +13,6 @@
 
 using namespace gatt;
 using namespace gpstracker;
-
-eeprom::PersistentByte ConfigurationManager::_frist("first", 8, "hooyah!");
-eeprom::Persistent<long> ConfigurationManager::_second("second");
-eeprom::Persistent<long> ConfigurationManager::_third("more please", 99);
 
 #include "ApplicationManager.h"
 
@@ -50,6 +47,14 @@ PersistentGATT<unsigned long> _motionDelay("motion.delay", motionDelay_uuid,
 		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
 		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 60000);
 
+PersistentGATT<unsigned long> _motionSensitivity("motion.sensitivity", motionSensitivity_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
+		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 100);
+
+PersistentGATTByte ConfigurationManager::_bleServerName("app.ble.name", 32, bleName_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
+		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, "mytracker");
+
 // PersistentGATTByte and PersistentGATT need common ancestor; hash that into a map for retrieval from
 // ConfigurationManager.  Create a singleton for ConfigurationManager and allow static objects to
 // register a callback for BLE services/characteristics which need/should stay in other objects.
@@ -70,9 +75,13 @@ void
 ConfigurationManager::updateBLEName(const char *name, const unsigned length)
 {
 	static char localName[32];
+	static const char *serverPrefix = "trackit-";
 
+	// std::string serverFullName = serverPrefix;
+
+	// truncate if needed
 	memcpy(localName, name, length < 32 ? length : 31);
-	localName[32] = 0;
+	localName[31] = 0;
 
 	vm_log_info("changing name to %s", localName);
 	_gatt->changeName(localName);
@@ -81,7 +90,7 @@ ConfigurationManager::updateBLEName(const char *name, const unsigned length)
 void
 ConfigurationManager::start()
 {
-	 _gatt = new gatt::Server(server_uuid, "mytracker");
+	 _gatt = new gatt::Server(server_uuid); // initial name empty string on purpose; eeprom value isn't initialized until later
 	 _eeprom = new eeprom::Manager;
 
 	buildServices();
@@ -164,7 +173,33 @@ ConfigurationManager::buildServices()
 		Service *motion = new gatt::Service(motion_service, true);
 
 		motion->addCharacteristic(&_motionDelay._ble);
+		motion->addCharacteristic(&_motionSensitivity._ble);
 		addService(motion);
+	}
+
+	{
+		Service *app = new gatt::Service(app_service, true);
+
+		std::function<void(const char *value, const unsigned len)> bleCharacteristicWriteHook = [&] (const char *value, const unsigned len) { updateBLEName(value, len); _bleServerName.setValue((void *)value, len); };
+		_bleServerName.setWriteHook(bleCharacteristicWriteHook);
+
+		app->addCharacteristic(&_bleServerName._ble);
+
+		ByteHookCharacteristic<long> *rebooter = new ByteHookCharacteristic<long>((VMUINT8 *) &reboot_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_WRITE,
+				VM_BT_GATT_PERMISSION_WRITE);
+		std::function<void(const long value)> rebootWriteHook = [&] (const long value) { vm_log_info("reboot requested via BLE.  see ya!"); vm_pwr_reboot(); };
+		rebooter->setWriteHook(rebootWriteHook);
+		app->addCharacteristic(rebooter);
+
+		ByteHookCharacteristic<long> *eraseEEprom = new ByteHookCharacteristic<long>((VMUINT8 *) &defaults_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_WRITE,
+				VM_BT_GATT_PERMISSION_WRITE);
+		std::function<void(const long value)> eraseWriteHook = [&] (const long value) { vm_log_info("wiping eeprom contents back to defaults"); _eeprom->eraseAll(); _eeprom->start(); };
+		eraseEEprom->setWriteHook(eraseWriteHook);
+		app->addCharacteristic(eraseEEprom);
+
+		addService(app);
 	}
 }
 
@@ -173,11 +208,6 @@ ConfigurationManager::mapEEPROM()
 {
 	// order matters here!  If you add a new object to the eeprom, it must go to the end of the list (and have a suitable default value)
 	// bind this to a BLE characteristic
-	// _eeprom->eraseAll();
-
-	_eeprom->add(&_frist);
-	_eeprom->add(&_second);
-	_eeprom->add(&_third);
 
 	_eeprom->add(&ApplicationManager::_apn);
 	_eeprom->add(&ApplicationManager::_proxyIP);
@@ -188,7 +218,12 @@ ConfigurationManager::mapEEPROM()
 	_eeprom->add(&_mqttPort);
 	_eeprom->add(&_gpsDelay);
 	_eeprom->add(&_motionDelay);
+	_eeprom->add(&_bleServerName);
+	_eeprom->add(&_motionSensitivity);
 
     _eeprom->start();
-	vm_log_info("read back %s and %d, %d", _frist.getString(), _second.getValue(), _third.getValue());
+	vm_log_info("my ble server name is %s", _bleServerName.getString());
+
+	// setting the name of the ble GATT server must be deferred until after the eeprom subsystem (with its offsets) is initialized in this method
+    _gatt->changeName(_bleServerName.getString());
 }

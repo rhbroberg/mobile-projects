@@ -3,6 +3,7 @@
 #include "eeprom/Manager.h"
 #include "eeprom/PersistentByte.h"
 #include "eeprom/Persistent.h"
+#include "PersistentGATTByte.h"
 
 #include "gatt/Server.h"
 
@@ -32,9 +33,7 @@ protected:
 	gatt::Server *_gatt;
 
 public:
-	static eeprom::PersistentByte _frist;
-	static eeprom::Persistent<long> _second;
-	static eeprom::Persistent<long> _third;
+	static PersistentGATTByte _bleServerName;
 };
 
 }

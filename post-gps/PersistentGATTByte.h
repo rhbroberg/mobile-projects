@@ -24,6 +24,16 @@ public:
 		_ble.setWriteHook(myWriteHook);
 	}
 
+	void setReadHook(std::function<const char *(void)> hook)
+	{
+		_ble.setReadHook(hook);
+	}
+
+	void setWriteHook(std::function<void(const char *, const unsigned)> hook)
+	{
+		_ble.setWriteHook(hook);
+	}
+
 	virtual ~PersistentGATTByte()
 	{
 	}
