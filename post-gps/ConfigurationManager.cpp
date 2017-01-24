@@ -55,6 +55,10 @@ PersistentGATTByte ConfigurationManager::_bleServerName("app.ble.name", 32, bleN
 		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
 		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, "mytracker");
 
+PersistentGATT<unsigned long> /*ConfigurationManager::*/_maintainBLE("app.ble.maintain", maintainBLE_uuid,
+		VM_BT_GATT_CHAR_PROPERTY_READ | VM_BT_GATT_CHAR_PROPERTY_WRITE,
+		VM_BT_GATT_PERMISSION_WRITE | VM_BT_GATT_PERMISSION_READ, 1);
+
 // PersistentGATTByte and PersistentGATT need common ancestor; hash that into a map for retrieval from
 // ConfigurationManager.  Create a singleton for ConfigurationManager and allow static objects to
 // register a callback for BLE services/characteristics which need/should stay in other objects.
@@ -84,6 +88,7 @@ ConfigurationManager::updateBLEName(const char *name, const unsigned length)
 	localName[31] = 0;
 
 	vm_log_info("changing name to %s", localName);
+	_bleServerName.setValue((void *) localName, strlen(localName));
 	_gatt->changeName(localName);
 }
 
@@ -107,13 +112,21 @@ ConfigurationManager::enableBLE()
 }
 
 void
-ConfigurationManager::disableBLE()
+ConfigurationManager::disableBLE(const bool override, std::function<void()> disableCallback)
 {
 	if (_isActive)
 	{
-		_gatt->disable();
+		if ((_maintainBLE.getValue() == 0) || override)
+		{
+			vm_log_info("disabling BLE now");
+			_gatt->disable(disableCallback);
+			_isActive = false;
+		}
+		else
+		{
+			vm_log_info("BLE maintaining connection");
+		}
 	}
-	_isActive = false;
 }
 
 const bool
@@ -138,6 +151,95 @@ ConfigurationManager::bindConnectionListener(std::function<void()> connect, std:
 	{
 		_gatt->bindConnectionListener(connect, disconnect);
 	}
+}
+
+#include "vmfs.h"
+#include "vmstdlib.h"
+#include "vmchset.h"
+
+VM_FS_HANDLE _firmware = -1;
+VMWCHAR _wfilename[VM_FS_MAX_PATH_LENGTH] =	{ 0 };
+VMCHAR _filename[VM_FS_MAX_PATH_LENGTH] = { 0 };
+unsigned long _receivedBlocks = 0;
+
+void
+ConfigurationManager::updateAndRestart()
+{
+#ifdef NOMO
+	// disable ble else part blows up when re-initialized on startup
+//	_config.disableBLE(true);
+
+	VMWCHAR _wfilename[VM_FS_MAX_PATH_LENGTH] =	{ 0 };
+	VMCHAR _filename[VM_FS_MAX_PATH_LENGTH] = { 0 };
+
+	VMCSTR filename = (const signed char *)"firmware";
+	sprintf(_filename, (VMCSTR) "%c:\\%s", vm_fs_get_internal_drive_letter(), filename);
+	vm_chset_ascii_to_ucs2(_wfilename, sizeof(_wfilename), _filename);
+#endif
+	vm_log_info("so long, louie!");
+	VM_RESULT result = vm_pmng_exit_and_update_application(_wfilename, NULL, 0, VM_PMNG_ENCRYPTION_NONE);
+	vm_log_info("result of exit and update is %d", result);
+}
+
+void
+ConfigurationManager::receivedFirmwareImageBytes(const char *value, const unsigned len)
+{
+	if (_firmware == -1)
+	{
+		// a more clever approach would name the firmware with the version string, and keep old versions to revert back to via a BLE command
+		VMCSTR filename = (const signed char *)"newfirm.vxp";
+		sprintf(_filename, (VMCSTR) "%c:\\%s", vm_fs_get_internal_drive_letter(), filename);
+		vm_chset_ascii_to_ucs2(_wfilename, sizeof(_wfilename), _filename);
+
+		vm_fs_delete(_wfilename);
+		if ((_firmware = vm_fs_open(_wfilename, VM_FS_MODE_APPEND, FALSE)) < 0)
+		{
+			if ((_firmware = vm_fs_open(_wfilename, VM_FS_MODE_CREATE_ALWAYS_WRITE,
+					FALSE)) < 0)
+			{
+				vm_log_info("woe creating firmware image file %s", _filename);
+			}
+		}
+		vm_log_info("open result is %d", _firmware);
+		_receivedBlocks = 0;
+	}
+	_receivedBlocks++;
+	VMUINT written;
+	VM_RESULT result;
+	result |= vm_fs_write(_firmware, value, len, &written);
+	vm_log_info("firmware block %d (%d bytes), written %d", _receivedBlocks, len, written);
+}
+
+#include "vmsystem.h"
+#include "message.h"
+
+void
+ConfigurationManager::receivedFirmwareVerification(const char *value, const unsigned len)
+{
+	vm_log_info("received block of firmware verification: %s (%d)", value, len);
+	vm_fs_close(_firmware);
+	_firmware = -1;
+	vm_log_info("here goes nuthing");
+
+	std::function<void()> disableHook = [&] () { updateAndRestart();};
+	disableBLE(true, disableHook);
+return;
+
+	disableBLE(true);
+
+#define MAYBE_WRONG_THREAD
+#ifdef MAYBE_WRONG_THREAD
+	VM_RESULT result = vm_pmng_exit_and_update_application(_wfilename, NULL, 0, VM_PMNG_ENCRYPTION_NONE);
+	vm_log_info("result of exit and update is %d", result);
+#else
+	VM_THREAD_HANDLE _mainThread = vm_thread_get_main_handle();
+    vm_thread_message_t _message;
+	_message.message_id = VM_MSG_ARDUINO_CALL;
+	_message.user_data = NULL;
+	vm_log_info("about to send to %x", _mainThread);
+	vm_thread_send_message(_mainThread, &_message);
+	vm_log_info("message sent to main");
+#endif
 }
 
 void
@@ -180,7 +282,7 @@ ConfigurationManager::buildServices()
 	{
 		Service *app = new gatt::Service(app_service, true);
 
-		std::function<void(const char *value, const unsigned len)> bleCharacteristicWriteHook = [&] (const char *value, const unsigned len) { updateBLEName(value, len); _bleServerName.setValue((void *)value, len); };
+		std::function<void(const char *value, const unsigned len)> bleCharacteristicWriteHook = [&] (const char *value, const unsigned len) { updateBLEName(value, len); };
 		_bleServerName.setWriteHook(bleCharacteristicWriteHook);
 
 		app->addCharacteristic(&_bleServerName._ble);
@@ -199,7 +301,29 @@ ConfigurationManager::buildServices()
 		eraseEEprom->setWriteHook(eraseWriteHook);
 		app->addCharacteristic(eraseEEprom);
 
+		app->addCharacteristic(&_maintainBLE._ble);
+
 		addService(app);
+	}
+
+	{
+		Service *firmware = new gatt::Service(firmware_service, true);
+
+		std::function<void(const char *value, const unsigned len)> imageCharacteristicWriteHook = [&] (const char *value, const unsigned len) { receivedFirmwareImageBytes(value, len); };
+		StringHookCharacteristic *_image = new StringHookCharacteristic((VMUINT8 *) &image_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_WRITE,
+				VM_BT_GATT_PERMISSION_WRITE);
+		_image->setWriteHook(imageCharacteristicWriteHook);
+
+		std::function<void(const char *value, const unsigned len)> verifyCharacteristicWriteHook = [&] (const char *value, const unsigned len) { receivedFirmwareVerification(value, len); };
+		StringHookCharacteristic *_verify = new StringHookCharacteristic((VMUINT8 *) &verify_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_WRITE,
+				VM_BT_GATT_PERMISSION_WRITE);
+		_verify->setWriteHook(verifyCharacteristicWriteHook);
+		firmware->addCharacteristic(_image);
+		firmware->addCharacteristic(_verify);
+		addService(firmware);
+
 	}
 }
 
@@ -220,6 +344,7 @@ ConfigurationManager::mapEEPROM()
 	_eeprom->add(&_motionDelay);
 	_eeprom->add(&_bleServerName);
 	_eeprom->add(&_motionSensitivity);
+	_eeprom->add(&_maintainBLE);
 
     _eeprom->start();
 	vm_log_info("my ble server name is %s", _bleServerName.getString());

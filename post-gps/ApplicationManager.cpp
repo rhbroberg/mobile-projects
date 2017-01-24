@@ -370,8 +370,38 @@ ApplicationManager::gsmPowerChanged(VMBOOL success)
 void
 ApplicationManager::buttonRelease()
 {
+#ifdef SLEEP_TESTING
 	_powerState = 1 - _powerState;
 	toggleSleep();
+#endif
+
+#ifdef UPDATE_TESTING
+	static int first = 0;
+
+	if (first == 0)
+	{
+		vm_log_info("disabling BLE first");
+		std::function<void()> disableHook = [&] () { updateAndRestart();};
+
+		_config.disableBLE(true, disableHook);
+		first++;
+	}
+	else if (first == 1)
+	{
+		vm_log_info("no mo power");
+		_config._gatt->poweroff();
+		first++;
+	}
+	else if (first == 2)
+	{
+#define UPGRADE_TESTING
+#ifdef UPGRADE_TESTING
+#else
+		vm_log_info("so long, louie!");
+		vm_pmng_restart_application();
+#endif
+	}
+#endif
 }
 
 void

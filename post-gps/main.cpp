@@ -123,6 +123,10 @@ void handle_sysevt(VMINT message, VMINT param)
 		vm_log_info("after arduino call made in main");
 		break;
 	}
+
+	case VM_EVENT_UPDATE_FAIL:
+		vm_log_info("****last update failed - how to communicate status back?")
+		break;
 	}
 }
 
