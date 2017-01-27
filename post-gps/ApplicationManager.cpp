@@ -275,6 +275,7 @@ ApplicationManager::start()
 	_config.mapEEPROM();
 	_network.registerGATT(_config);
 	_applicationInfo.registerGATT(_config);
+	_updateManager.registerGATT(_config);
 	_config.enableBLE();
 	std::function<void()> attachHook = [&] () { bleClientAttached();};
 	std::function<void()> detachHook = [&] () { bleClientDetached(); activate(); };

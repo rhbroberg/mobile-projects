@@ -14,6 +14,7 @@
 #include "vmwdt.h"
 #include "InterruptMapper.h"
 #include "MotionTracker.h"
+#include "UpdateManager.h"
 
 namespace gpstracker
 {
@@ -54,6 +55,7 @@ protected:
 	gpstracker::ConfigurationManager _config;
 	InterruptMapper *_activityInterrupt;
 	MotionTracker _motionTracker;
+	UpdateManager _updateManager;
 	bool _networkIsReady;
 	VM_THREAD_HANDLE _thread;
 	VM_TIMER_ID_NON_PRECISE _bleTimeout;
