@@ -21,7 +21,6 @@ MotionTracker::setup()
   }
 
   _accelerometer.setRange(LIS3DH_RANGE_4_G);   // 2, 4, 8 or 16 G!
-  //_accelerometer.setDataRate(LIS3DH_DATARATE_LOWPOWER_1K6HZ);
   _accelerometer.interruptOnMotion();
   return true;
 }

@@ -25,6 +25,8 @@ extern PersistentGATT<unsigned long> _motionDelay;
 #include "vmhttps.h"
 void myHttpSend(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data);
 
+#include "vmchset.h"
+
 ApplicationManager::ApplicationManager()
   : _publishFailures(0)
   , _journalName("mylog.txt")
@@ -52,6 +54,12 @@ ApplicationManager::ApplicationManager()
 	vm_log_info("welcome, '%s'/%d.%d.%d at your service", _applicationInfo.getName(),
 			_applicationInfo.getMajor(), _applicationInfo.getMinor(), _applicationInfo.getPatchlevel());
 	vm_log_info("resources: firmware '%s', max memory %d", _applicationInfo.getFirmware(), _applicationInfo.getMaxMem());
+
+	VMCHAR path[VM_FS_MAX_PATH_LENGTH] = { 0 };
+	VMWCHAR wpath[VM_FS_MAX_PATH_LENGTH] =	{ 0 };
+	(void) vm_pmng_get_running_application_path(wpath);
+	vm_chset_ucs2_to_ascii(path, sizeof(path), wpath);
+	vm_log_info("application path is '%s'", path);
 }
 
 void
@@ -370,38 +378,8 @@ ApplicationManager::gsmPowerChanged(VMBOOL success)
 void
 ApplicationManager::buttonRelease()
 {
-#ifdef SLEEP_TESTING
 	_powerState = 1 - _powerState;
 	toggleSleep();
-#endif
-
-#ifdef UPDATE_TESTING
-	static int first = 0;
-
-	if (first == 0)
-	{
-		vm_log_info("disabling BLE first");
-		std::function<void()> disableHook = [&] () { updateAndRestart();};
-
-		_config.disableBLE(true, disableHook);
-		first++;
-	}
-	else if (first == 1)
-	{
-		vm_log_info("no mo power");
-		_config._gatt->poweroff();
-		first++;
-	}
-	else if (first == 2)
-	{
-#define UPGRADE_TESTING
-#ifdef UPGRADE_TESTING
-#else
-		vm_log_info("so long, louie!");
-		vm_pmng_restart_application();
-#endif
-	}
-#endif
 }
 
 void

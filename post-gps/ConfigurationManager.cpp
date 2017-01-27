@@ -165,49 +165,79 @@ unsigned long _receivedBlocks = 0;
 void
 ConfigurationManager::updateAndRestart()
 {
-#ifdef NOMO
-	// disable ble else part blows up when re-initialized on startup
-//	_config.disableBLE(true);
+	VM_FS_HANDLE autostart = -1;
+	VMCHAR autostartPath[VM_FS_MAX_PATH_LENGTH] = { 0 };
+	VMWCHAR w_autostartPath[VM_FS_MAX_PATH_LENGTH] = { 0 };
 
-	VMWCHAR _wfilename[VM_FS_MAX_PATH_LENGTH] =	{ 0 };
-	VMCHAR _filename[VM_FS_MAX_PATH_LENGTH] = { 0 };
+	sprintf(autostartPath, (VMCSTR) "%c:\\autostart.txt", vm_fs_get_internal_drive_letter());
+	vm_chset_ascii_to_ucs2(w_autostartPath, sizeof(w_autostartPath), autostartPath);
 
-	VMCSTR filename = (const signed char *)"firmware";
+	vm_fs_delete(w_autostartPath);
+	if ((autostart = vm_fs_open(w_autostartPath, VM_FS_MODE_APPEND, FALSE)) < 0)
+	{
+		if ((autostart = vm_fs_open(w_autostartPath, VM_FS_MODE_CREATE_ALWAYS_WRITE,
+				FALSE)) < 0)
+		{
+			vm_log_info("woe creating autostart.txt file");
+		}
+	}
+	VMUINT written;
+	VMCHAR autostartLine[256];
+	sprintf(autostartLine, (VMCSTR) "[autostart]App=%s", _filename);
+	VMUINT result = vm_fs_write(autostart, autostartLine, strlen((const char *) autostartLine), &written);
+	vm_fs_close(autostart);
+	vm_log_info("wrote %d to autostart file (%d)", written, result);
+
+	vm_log_info("so long, screwie, see ya in saint louie!");
+	vm_pwr_reboot();
+	// would like to use the API for doing this, but cannot make it work reliably :(
+	// result = vm_pmng_exit_and_update_application(_wfilename, NULL, 0, VM_PMNG_ENCRYPTION_NONE);
+	// vm_log_info("result of exit and update is %d", result);
+}
+
+void
+ConfigurationManager::beginFirmwareDownload(const char *value, const unsigned len)
+{
+	// previous attempt never completed; start again
+	if (_firmware != -1)
+	{
+		vm_fs_close(_firmware);
+		vm_fs_delete(_wfilename);
+		_firmware = -1;
+	}
+	// a more clever approach would name the firmware with the version string, and keep old versions to revert back to via a BLE command
+	VMCHAR filename[128];
+	strncpy((char *) filename, value, len < sizeof(filename) -1 ? len : sizeof(filename) - 1);
+	filename[len] = 0;
 	sprintf(_filename, (VMCSTR) "%c:\\%s", vm_fs_get_internal_drive_letter(), filename);
+	vm_log_info("firmware '%s' => '%s'", filename, _filename);
 	vm_chset_ascii_to_ucs2(_wfilename, sizeof(_wfilename), _filename);
-#endif
-	vm_log_info("so long, louie!");
-	VM_RESULT result = vm_pmng_exit_and_update_application(_wfilename, NULL, 0, VM_PMNG_ENCRYPTION_NONE);
-	vm_log_info("result of exit and update is %d", result);
+
+	vm_fs_delete(_wfilename);
+	if ((_firmware = vm_fs_open(_wfilename, VM_FS_MODE_APPEND, FALSE)) < 0)
+	{
+		if ((_firmware = vm_fs_open(_wfilename, VM_FS_MODE_CREATE_ALWAYS_WRITE,
+				FALSE)) < 0)
+		{
+			vm_log_info("woe creating firmware image file %s", _filename);
+		}
+	}
+	vm_log_info("open result is %d", _firmware);
+	_receivedBlocks = 0;
 }
 
 void
 ConfigurationManager::receivedFirmwareImageBytes(const char *value, const unsigned len)
 {
-	if (_firmware == -1)
-	{
-		// a more clever approach would name the firmware with the version string, and keep old versions to revert back to via a BLE command
-		VMCSTR filename = (const signed char *)"newfirm.vxp";
-		sprintf(_filename, (VMCSTR) "%c:\\%s", vm_fs_get_internal_drive_letter(), filename);
-		vm_chset_ascii_to_ucs2(_wfilename, sizeof(_wfilename), _filename);
-
-		vm_fs_delete(_wfilename);
-		if ((_firmware = vm_fs_open(_wfilename, VM_FS_MODE_APPEND, FALSE)) < 0)
-		{
-			if ((_firmware = vm_fs_open(_wfilename, VM_FS_MODE_CREATE_ALWAYS_WRITE,
-					FALSE)) < 0)
-			{
-				vm_log_info("woe creating firmware image file %s", _filename);
-			}
-		}
-		vm_log_info("open result is %d", _firmware);
-		_receivedBlocks = 0;
-	}
 	_receivedBlocks++;
 	VMUINT written;
 	VM_RESULT result;
-	result |= vm_fs_write(_firmware, value, len, &written);
-	vm_log_info("firmware block %d (%d bytes), written %d", _receivedBlocks, len, written);
+	result = vm_fs_write(_firmware, value, len, &written);
+	// 	no need to overwhelm output
+	if (_receivedBlocks % 32 == 0)
+	{
+		vm_log_info("firmware block %d (%d bytes), written %d", _receivedBlocks, len, written);
+	}
 }
 
 #include "vmsystem.h"
@@ -223,23 +253,6 @@ ConfigurationManager::receivedFirmwareVerification(const char *value, const unsi
 
 	std::function<void()> disableHook = [&] () { updateAndRestart();};
 	disableBLE(true, disableHook);
-return;
-
-	disableBLE(true);
-
-#define MAYBE_WRONG_THREAD
-#ifdef MAYBE_WRONG_THREAD
-	VM_RESULT result = vm_pmng_exit_and_update_application(_wfilename, NULL, 0, VM_PMNG_ENCRYPTION_NONE);
-	vm_log_info("result of exit and update is %d", result);
-#else
-	VM_THREAD_HANDLE _mainThread = vm_thread_get_main_handle();
-    vm_thread_message_t _message;
-	_message.message_id = VM_MSG_ARDUINO_CALL;
-	_message.user_data = NULL;
-	vm_log_info("about to send to %x", _mainThread);
-	vm_thread_send_message(_mainThread, &_message);
-	vm_log_info("message sent to main");
-#endif
 }
 
 void
@@ -314,16 +327,23 @@ ConfigurationManager::buildServices()
 				VM_BT_GATT_CHAR_PROPERTY_WRITE,
 				VM_BT_GATT_PERMISSION_WRITE);
 		_image->setWriteHook(imageCharacteristicWriteHook);
+		firmware->addCharacteristic(_image);
 
 		std::function<void(const char *value, const unsigned len)> verifyCharacteristicWriteHook = [&] (const char *value, const unsigned len) { receivedFirmwareVerification(value, len); };
 		StringHookCharacteristic *_verify = new StringHookCharacteristic((VMUINT8 *) &verify_uuid,
 				VM_BT_GATT_CHAR_PROPERTY_WRITE,
 				VM_BT_GATT_PERMISSION_WRITE);
 		_verify->setWriteHook(verifyCharacteristicWriteHook);
-		firmware->addCharacteristic(_image);
 		firmware->addCharacteristic(_verify);
-		addService(firmware);
 
+		std::function<void(const char *value, const unsigned len)> initiateCharacteristicWriteHook = [&] (const char *value, const unsigned len) { beginFirmwareDownload(value, len); };
+		StringHookCharacteristic *_initiate = new StringHookCharacteristic((VMUINT8 *) &initiate_uuid,
+				VM_BT_GATT_CHAR_PROPERTY_WRITE,
+				VM_BT_GATT_PERMISSION_WRITE);
+		_initiate->setWriteHook(initiateCharacteristicWriteHook);
+		firmware->addCharacteristic(_initiate);
+
+		addService(firmware);
 	}
 }
 

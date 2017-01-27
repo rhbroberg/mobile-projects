@@ -125,7 +125,6 @@ void
 GPSHelper::pauseHook()
 {
 	vm_log_info("gps pausing");
-//	write("$PMTK225,8*23\r\n");
 	write("$PMTK225,0*2B\r\n");
 	write("$PMTK161,0*28\r\n");
 }

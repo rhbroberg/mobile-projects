@@ -63,7 +63,7 @@ VMINT handle_keypad_event(VM_KEYPAD_EVENT event, VMINT code)
 		{
 			// up
 			vm_log_debug("key is released\n");
-		    appmgr.buttonRelease();
+			appmgr.buttonRelease();
 		}
 		return 0;
 	}
@@ -125,7 +125,7 @@ void handle_sysevt(VMINT message, VMINT param)
 	}
 
 	case VM_EVENT_UPDATE_FAIL:
-		vm_log_info("****last update failed - how to communicate status back?")
+		vm_log_info("****last update failed - how to communicate status back?");
 		break;
 	}
 }
