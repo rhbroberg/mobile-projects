@@ -73,9 +73,9 @@ void initializeSystem(VM_TIMER_ID_NON_PRECISE timer_id, void *user_data)
 {
 	vm_timer_delete_non_precise(timer_id);
 
-    appmgr.start();
+	appmgr.start();
 
-    if (showBatteryStats())
+	if (showBatteryStats())
 	{
 		appmgr._blinker.change(gpstracker::LEDBlinker::color(gpstracker::LEDBlinker::green), 300, 200, 3, true);
 	}
@@ -116,8 +116,8 @@ void handle_sysevt(VMINT message, VMINT param)
 
 		/* Special event for arduino application, when arduino thead need call LinkIt 2.0 inteface, it will use this event  */
 	case VM_MSG_ARDUINO_CALL:
-	{
-		std::function<void()> *inMain = (std::function<void()> *) &param;
+		{
+		std::function < void() > *inMain = (std::function<void()> *) &param;
 		vm_log_info("in arduino call, user_data is %x", (void *)inMain);
 		(*inMain)();
 		vm_log_info("after arduino call made in main");
@@ -136,6 +136,6 @@ void vm_main(void)
 {
 	// maybe want to explicitly reset the gsm radio, since sometimes only a full power cycle seems to fix it?
 	vm_pmng_register_system_event_callback(handle_sysevt);
-    vm_keypad_register_event_callback(handle_keypad_event);
+	vm_keypad_register_event_callback(handle_keypad_event);
 }
 }

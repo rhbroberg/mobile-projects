@@ -19,6 +19,7 @@ protected:
 	void beginFirmwareDownload(const char *value, const unsigned len);
 	void receivedFirmwareBytes(const char *value, const unsigned len);
 	void receivedFirmwareVerification(const char *value, const unsigned len);
+	void decompress();
 
 	VM_FS_HANDLE _firmware = -1;
 	VMWCHAR _wfilename[VM_FS_MAX_PATH_LENGTH] =	{ 0 };

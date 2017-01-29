@@ -15,6 +15,11 @@
 
 #include "PersistentGATT.h"
 
+#include "zlib.h"
+extern "C" {
+int inf(VM_FS_HANDLE source, VM_FS_HANDLE dest);
+}
+
 using namespace gatt;
 using namespace gpstracker;
 
@@ -62,8 +67,45 @@ UpdateManager::registerGATT(ConfigurationManager &configMgr)
 }
 
 void
+UpdateManager::decompress()
+{
+	VMCHAR deflatedPath[VM_FS_MAX_PATH_LENGTH] = { 0 };
+	VMWCHAR w_deflatedPath[VM_FS_MAX_PATH_LENGTH] = { 0 };
+	VM_FS_HANDLE deflated = -1;
+
+	sprintf(deflatedPath, (VMCSTR) "%c:\\deflated.vxp", vm_fs_get_internal_drive_letter());
+	vm_chset_ascii_to_ucs2(w_deflatedPath, sizeof(w_deflatedPath), deflatedPath);
+
+	vm_log_info("about to decompress");
+	vm_fs_delete(w_deflatedPath);
+	if ((deflated = vm_fs_open(w_deflatedPath, VM_FS_MODE_APPEND, FALSE)) < 0)
+	{
+		if ((deflated = vm_fs_open(w_deflatedPath, VM_FS_MODE_CREATE_ALWAYS_WRITE,
+				FALSE)) < 0)
+		{
+			vm_log_info("woe creating deflated image file %s", deflatedPath);
+		}
+	}
+
+	VM_FS_HANDLE received = -1;
+	if ((received = vm_fs_open(_wfilename, VM_FS_MODE_READ, FALSE)) < 0)
+	{
+		vm_log_info("cannot open firmware filename");
+	}
+
+	int ret = inf(received, deflated);
+
+	vm_log_info("finished decompress, result is %d - success %d", ret, ret != Z_OK);
+	vm_fs_close(deflated);
+	vm_fs_close(received);
+}
+
+void
 UpdateManager::updateAndRestart()
 {
+	decompress();
+	return;
+
 	VM_FS_HANDLE autostart = -1;
 	VMCHAR autostartPath[VM_FS_MAX_PATH_LENGTH] = { 0 };
 	VMWCHAR w_autostartPath[VM_FS_MAX_PATH_LENGTH] = { 0 };
